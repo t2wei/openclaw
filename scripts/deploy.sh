@@ -84,7 +84,8 @@ if [ -d "$PROJECT_DIR/dist" ]; then
 fi
 
 # Cap Node heap to 1.5 GB to prevent OOM on low-RAM servers (server has 3.7 GB total)
-NODE_OPTIONS="--max-old-space-size=1536" "$PNPM" build
+# Memory limit: ~4GB for build (safe with 7.6GB total RAM, leaves room for gateway)
+NODE_OPTIONS="--max-old-space-size=4096" "$PNPM" build
 echo ""
 
 # ── 5. Restart (if requested) ────────────────────────────────────────────────
