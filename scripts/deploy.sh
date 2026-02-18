@@ -83,7 +83,8 @@ if [ -d "$PROJECT_DIR/dist" ]; then
   cp -r "$PROJECT_DIR/dist" "$PROJECT_DIR/dist.bak"
 fi
 
-"$PNPM" build
+# Cap Node heap to 1.5 GB to prevent OOM on low-RAM servers (server has 3.7 GB total)
+NODE_OPTIONS="--max-old-space-size=1536" "$PNPM" build
 echo ""
 
 # ── 5. Restart (if requested) ────────────────────────────────────────────────
@@ -97,11 +98,11 @@ fi
 
 echo "🔄 Restarting gateway..."
 
-# systemd path
-if systemctl is-active --quiet openclaw-gateway 2>/dev/null; then
-  sudo systemctl restart openclaw-gateway
-  echo "✅ Restarted via systemd"
-  exit 0
+# Stop the systemd-managed prod gateway if it's running so we can take the port.
+# (The dev fork runs as a manual process, not via systemd.)
+if systemctl --user is-active --quiet openclaw-gateway 2>/dev/null; then
+  echo "  Stopping systemd openclaw-gateway service..."
+  systemctl --user stop openclaw-gateway
 fi
 
 # Manual path: use setsid so the restart survives the old gateway's SIGTERM
