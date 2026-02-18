@@ -13,6 +13,7 @@ import {
   userListWikiNodes,
   isUserAuthorized,
   getOAuthConfig,
+  getFirstAuthorizedUser,
 } from "./user-client.js";
 import { FeishuWikiSchema, type FeishuWikiParams } from "./wiki-schema.js";
 
@@ -202,10 +203,14 @@ export function registerFeishuWikiTools(api: OpenClawPluginApi) {
       async execute(_toolCallId, params, _signal, _onUpdate, context?: OpenClawPluginToolContext) {
         const p = params as FeishuWikiParams;
 
-        // Try to get user context from session
-        const openId = extractOpenIdFromSession(context?.sessionKey);
-        let userApiConfig: UserApiConfig | null = null;
+        // Try to get user context from session, or fall back to first authorized user
+        let openId = extractOpenIdFromSession(context?.sessionKey);
+        if (!openId && oauthConfig) {
+          // Fallback: use first authorized user when session context not available
+          openId = getFirstAuthorizedUser();
+        }
 
+        let userApiConfig: UserApiConfig | null = null;
         if (openId && oauthConfig) {
           userApiConfig = await buildUserApiConfig(firstAccount, openId);
         }
