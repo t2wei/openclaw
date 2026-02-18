@@ -9,7 +9,7 @@ import { getValidUserAccessToken, type OAuthConfig } from "./oauth.js";
 import type { FeishuDomain, FeishuOAuthConfig } from "./types.js";
 import type { ResolvedFeishuAccount } from "./types.js";
 import { userGet, userPost, type UserApiConfig } from "./user-api.js";
-import { getUserToken, hasValidToken } from "./user-token-store.js";
+import { getUserToken, hasValidToken, listUserTokens } from "./user-token-store.js";
 
 export interface UserClientContext {
   account: ResolvedFeishuAccount;
@@ -39,6 +39,16 @@ export function extractOpenIdFromSession(sessionKey?: string): string | undefine
   if (userMatch) return userMatch[1];
 
   return undefined;
+}
+
+/**
+ * Get the first available authorized user from token store.
+ * This is a fallback when session context is not available.
+ */
+export function getFirstAuthorizedUser(): string | undefined {
+  const tokens = listUserTokens();
+  const validToken = tokens.find((t) => hasValidToken(t.openId));
+  return validToken?.openId;
 }
 
 /**
