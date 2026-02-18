@@ -1,0 +1,20 @@
+[Unit]
+Description=OpenClaw Gateway (Development Fork)
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/app_data/openclaw-dev
+ExecStart=/usr/bin/node /opt/app_data/openclaw-dev/openclaw.mjs gateway
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=openclaw-dev
+
+[Install]
+WantedBy=multi-user.target
