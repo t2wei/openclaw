@@ -60,7 +60,7 @@ export async function handleOAuthCallback(
 }
 
 /**
- * Generate success HTML page.
+ * Generate success HTML page with i18n support.
  */
 function generateSuccessPage(): string {
   return `
@@ -69,7 +69,7 @@ function generateSuccessPage(): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Authorization Successful</title>
+  <title>Authorization Successful / 授权成功</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -103,16 +103,24 @@ function generateSuccessPage(): string {
       color: #999;
       font-size: 14px;
     }
+    .lang-zh { display: none; }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="icon">✅</div>
-    <h1>Authorization Successful!</h1>
-    <p>You have granted document access to the bot.</p>
-    <p class="close-hint">You can close this window and return to Feishu.</p>
+    <h1 class="lang-en">Authorization Successful!</h1>
+    <h1 class="lang-zh">授权成功！</h1>
+    <p class="lang-en">You have granted document access to the bot.</p>
+    <p class="lang-zh">你已授权机器人访问你的文档。</p>
+    <p class="close-hint lang-en">You can close this window and return to Feishu.</p>
+    <p class="close-hint lang-zh">你可以关闭此窗口并返回飞书。</p>
   </div>
   <script>
+    // Detect language and show appropriate content
+    const isZh = navigator.language.toLowerCase().startsWith('zh');
+    document.querySelectorAll('.lang-en').forEach(el => el.style.display = isZh ? 'none' : 'block');
+    document.querySelectorAll('.lang-zh').forEach(el => el.style.display = isZh ? 'block' : 'none');
     // Auto-close after 3 seconds
     setTimeout(() => window.close(), 3000);
   </script>
@@ -122,7 +130,7 @@ function generateSuccessPage(): string {
 }
 
 /**
- * Generate error HTML page.
+ * Generate error HTML page with i18n support.
  */
 function generateErrorPage(error: string): string {
   return `
@@ -131,7 +139,7 @@ function generateErrorPage(error: string): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Authorization Failed</title>
+  <title>Authorization Failed / 授权失败</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -172,16 +180,25 @@ function generateErrorPage(error: string): string {
       font-size: 14px;
       word-break: break-word;
     }
+    .lang-zh { display: none; }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="icon">❌</div>
-    <h1>Authorization Failed</h1>
-    <p>Something went wrong during authorization.</p>
+    <h1 class="lang-en">Authorization Failed</h1>
+    <h1 class="lang-zh">授权失败</h1>
+    <p class="lang-en">Something went wrong during authorization.</p>
+    <p class="lang-zh">授权过程中出现错误。</p>
     <div class="error">${escapeHtml(error)}</div>
-    <p style="margin-top: 20px;">Please try again or contact support.</p>
+    <p style="margin-top: 20px;" class="lang-en">Please try again or contact support.</p>
+    <p style="margin-top: 20px;" class="lang-zh">请重试或联系管理员。</p>
   </div>
+  <script>
+    const isZh = navigator.language.toLowerCase().startsWith('zh');
+    document.querySelectorAll('.lang-en').forEach(el => el.style.display = isZh ? 'none' : 'block');
+    document.querySelectorAll('.lang-zh').forEach(el => el.style.display = isZh ? 'block' : 'none');
+  </script>
 </body>
 </html>
 `;
