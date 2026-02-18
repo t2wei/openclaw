@@ -248,10 +248,38 @@ export async function getValidUserAccessToken(
 }
 
 /**
- * Generate an interactive card message for authorization.
+ * i18n messages for OAuth card.
  */
-export function generateAuthCard(config: OAuthConfig, openId: string): object {
+const i18nMessages = {
+  zh: {
+    title: "🔐 需要用户授权",
+    body: "要使用你的身份访问文档和知识库，请点击下方按钮授权。\n\n授权后，我就能用你的身份访问你能看到的所有内容。",
+    button: "点击授权",
+    note: "此授权仅限访问你有权限查看的内容",
+  },
+  en: {
+    title: "🔐 Authorization Required",
+    body: "To access your documents, wikis, and files, I need your authorization.\n\nClick the button below to grant access. You only need to do this once.",
+    button: "Authorize Access",
+    note: "This authorization allows me to access documents you can see, with your identity.",
+  },
+};
+
+export type SupportedLocale = "zh" | "en";
+
+/**
+ * Generate an interactive card message for authorization.
+ * @param config OAuth configuration
+ * @param openId User's open_id
+ * @param locale Language locale (default: "en")
+ */
+export function generateAuthCard(
+  config: OAuthConfig,
+  openId: string,
+  locale: SupportedLocale = "en",
+): object {
   const authUrl = generateAuthUrl(config, openId);
+  const msg = i18nMessages[locale] || i18nMessages.en;
 
   return {
     config: {
@@ -260,7 +288,7 @@ export function generateAuthCard(config: OAuthConfig, openId: string): object {
     header: {
       title: {
         tag: "plain_text",
-        content: "🔐 Authorization Required",
+        content: msg.title,
       },
       template: "blue",
     },
@@ -269,9 +297,7 @@ export function generateAuthCard(config: OAuthConfig, openId: string): object {
         tag: "div",
         text: {
           tag: "lark_md",
-          content:
-            "To access your documents, wikis, and files, I need your authorization.\n\n" +
-            "Click the button below to grant access. You only need to do this once.",
+          content: msg.body,
         },
       },
       {
@@ -281,7 +307,7 @@ export function generateAuthCard(config: OAuthConfig, openId: string): object {
             tag: "button",
             text: {
               tag: "plain_text",
-              content: "Authorize Access",
+              content: msg.button,
             },
             type: "primary",
             url: authUrl,
@@ -293,8 +319,7 @@ export function generateAuthCard(config: OAuthConfig, openId: string): object {
         elements: [
           {
             tag: "plain_text",
-            content:
-              "This authorization allows me to access documents you can see, with your identity.",
+            content: msg.note,
           },
         ],
       },
