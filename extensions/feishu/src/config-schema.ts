@@ -91,6 +91,21 @@ const FeishuToolsConfigSchema = z
   .optional();
 
 /**
+ * OAuth configuration for user_access_token support.
+ * When enabled, the bot can access documents/wikis with user's identity.
+ */
+const OAuthConfigSchema = z
+  .object({
+    enabled: z.boolean().optional(), // Enable OAuth (default: false)
+    redirectUri: z.string().url().optional(), // OAuth callback URL
+    scopes: z.array(z.string()).optional(), // Requested OAuth scopes
+    tokenStorePath: z.string().optional(), // Path to store user tokens
+    autoPrompt: z.boolean().optional(), // Auto-prompt for authorization when needed (default: true)
+  })
+  .strict()
+  .optional();
+
+/**
  * Topic session isolation mode for group chats.
  * - "disabled" (default): All messages in a group share one session
  * - "enabled": Messages in different topics get separate sessions
@@ -148,6 +163,7 @@ export const FeishuAccountConfigSchema = z
     renderMode: RenderModeSchema,
     streaming: StreamingModeSchema, // Enable streaming card mode (default: true)
     tools: FeishuToolsConfigSchema,
+    oauth: OAuthConfigSchema, // OAuth configuration for user_access_token
   })
   .strict();
 
@@ -184,6 +200,8 @@ export const FeishuConfigSchema = z
     renderMode: RenderModeSchema, // raw = plain text (default), card = interactive card with markdown
     streaming: StreamingModeSchema, // Enable streaming card mode (default: true)
     tools: FeishuToolsConfigSchema,
+    // OAuth configuration for user_access_token
+    oauth: OAuthConfigSchema,
     // Dynamic agent creation for DM users
     dynamicAgentCreation: DynamicAgentCreationSchema,
     // Multi-account configuration
