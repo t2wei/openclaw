@@ -73,6 +73,14 @@ export type FeishuToolsConfig = {
   scopes?: boolean;
 };
 
+export type FeishuOAuthConfig = {
+  enabled?: boolean;
+  redirectUri?: string;
+  scopes?: string[];
+  tokenStorePath?: string;
+  autoPrompt?: boolean;
+};
+
 export type DynamicAgentCreationConfig = {
   enabled?: boolean;
   workspaceTemplate?: string;
