@@ -251,3 +251,84 @@ export async function userGetDocumentRawContent(config: UserApiConfig, docToken:
     content: res.data?.content ?? "",
   };
 }
+
+// ============ Drive API Wrappers ============
+
+/**
+ * List drive files/folders with user identity.
+ */
+export async function userListDriveFiles(config: UserApiConfig, folderToken?: string) {
+  const params: Record<string, string> = {};
+  if (folderToken) {
+    params.folder_token = folderToken;
+  }
+
+  const res = await userGet<{ files?: unknown[] }>(config, "/open-apis/drive/v1/files", params);
+
+  if (res.code !== 0) {
+    throw new Error(`Failed to list drive files: ${res.msg}`);
+  }
+
+  return {
+    files: res.data?.files ?? [],
+  };
+}
+
+/**
+ * Get file/folder info with user identity.
+ */
+export async function userGetDriveFileInfo(config: UserApiConfig, fileToken: string, type: string) {
+  const res = await userGet<Record<string, unknown>>(
+    config,
+    `/open-apis/drive/v1/metas/batch_query`,
+    {},
+  );
+
+  // For single file, use the meta endpoint
+  const metaRes = await userPost<{ metas?: unknown[] }>(
+    config,
+    "/open-apis/drive/v1/metas/batch_query",
+    {
+      request_docs: [{ doc_token: fileToken, doc_type: type }],
+    },
+  );
+
+  if (metaRes.code !== 0) {
+    throw new Error(`Failed to get file info: ${metaRes.msg}`);
+  }
+
+  return {
+    meta: metaRes.data?.metas?.[0] ?? null,
+  };
+}
+
+/**
+ * Search drive files with user identity.
+ */
+export async function userSearchDriveFiles(
+  config: UserApiConfig,
+  query: string,
+  folderToken?: string,
+) {
+  const body: Record<string, unknown> = {
+    search_key: query,
+    count: 50,
+  };
+  if (folderToken) {
+    body.folder_token = folderToken;
+  }
+
+  const res = await userPost<{ files?: unknown[] }>(
+    config,
+    "/open-apis/suite/docs-api/search/object",
+    body,
+  );
+
+  if (res.code !== 0) {
+    throw new Error(`Failed to search drive: ${res.msg}`);
+  }
+
+  return {
+    files: res.data?.files ?? [],
+  };
+}

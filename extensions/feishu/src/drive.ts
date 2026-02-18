@@ -4,6 +4,13 @@ import { listEnabledFeishuAccounts } from "./accounts.js";
 import { createFeishuClient } from "./client.js";
 import { FeishuDriveSchema, type FeishuDriveParams } from "./drive-schema.js";
 import { resolveToolsConfig } from "./tools-config.js";
+import type { UserApiConfig } from "./user-api.js";
+import {
+  getFirstAuthorizedUser,
+  buildUserApiConfig,
+  getOAuthConfig,
+  userListDriveFiles,
+} from "./user-client.js";
 
 // ============ Helpers ============
 
@@ -188,6 +195,15 @@ export function registerFeishuDriveTools(api: OpenClawPluginApi) {
   }
 
   const getClient = () => createFeishuClient(firstAccount);
+  const oauthConfig = getOAuthConfig(firstAccount);
+
+  // Helper to get user API config (if user is authorized)
+  const getUserApiConfig = async (): Promise<UserApiConfig | null> => {
+    if (!oauthConfig) return null;
+    const openId = getFirstAuthorizedUser();
+    if (!openId) return null;
+    return buildUserApiConfig(firstAccount, openId);
+  };
 
   api.registerTool(
     {
@@ -198,7 +214,25 @@ export function registerFeishuDriveTools(api: OpenClawPluginApi) {
       parameters: FeishuDriveSchema,
       async execute(_toolCallId, params) {
         const p = params as FeishuDriveParams;
+
+        // Try to use user identity for list operations
+        const userApiConfig = await getUserApiConfig();
+
         try {
+          // For list operations, prefer user identity if available
+          if (userApiConfig && p.action === "list") {
+            try {
+              const result = await userListDriveFiles(userApiConfig, p.folder_token);
+              return json({ ...result, _mode: "user_identity" });
+            } catch (userErr) {
+              // Fall back to app identity if user identity fails
+              api.logger.debug?.(
+                `feishu_drive: user identity failed, falling back to app: ${userErr}`,
+              );
+            }
+          }
+
+          // Use app identity for all other operations or as fallback
           const client = getClient();
           switch (p.action) {
             case "list":

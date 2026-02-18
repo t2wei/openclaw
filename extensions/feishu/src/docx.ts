@@ -7,6 +7,15 @@ import { createFeishuClient } from "./client.js";
 import { FeishuDocSchema, type FeishuDocParams } from "./doc-schema.js";
 import { getFeishuRuntime } from "./runtime.js";
 import { resolveToolsConfig } from "./tools-config.js";
+import type { UserApiConfig } from "./user-api.js";
+import {
+  getFirstAuthorizedUser,
+  buildUserApiConfig,
+  getOAuthConfig,
+  userGetDocument,
+  userListDocumentBlocks,
+  userGetDocumentRawContent,
+} from "./user-client.js";
 
 // ============ Helpers ============
 
@@ -461,7 +470,54 @@ export function registerFeishuDocTools(api: OpenClawPluginApi) {
 
   // Helper to get client for the default account
   const getClient = () => createFeishuClient(firstAccount);
+  const oauthConfig = getOAuthConfig(firstAccount);
   const registered: string[] = [];
+
+  // Helper to get user API config (if user is authorized)
+  const getUserApiConfig = async (): Promise<UserApiConfig | null> => {
+    if (!oauthConfig) return null;
+    const openId = getFirstAuthorizedUser();
+    if (!openId) return null;
+    return buildUserApiConfig(firstAccount, openId);
+  };
+
+  // User-identity read function
+  const userReadDoc = async (userApi: UserApiConfig, docToken: string) => {
+    const [contentRes, infoRes, blocksRes] = await Promise.all([
+      userGetDocumentRawContent(userApi, docToken),
+      userGetDocument(userApi, docToken),
+      userListDocumentBlocks(userApi, docToken),
+    ]);
+
+    const blocks = blocksRes.blocks as Array<{ block_type?: number }>;
+    const blockCounts: Record<string, number> = {};
+    const structuredTypes: string[] = [];
+
+    for (const b of blocks) {
+      const type = b.block_type ?? 0;
+      const name = BLOCK_TYPE_NAMES[type] || `type_${type}`;
+      blockCounts[name] = (blockCounts[name] || 0) + 1;
+
+      if (STRUCTURED_BLOCK_TYPES.has(type) && !structuredTypes.includes(name)) {
+        structuredTypes.push(name);
+      }
+    }
+
+    let hint: string | undefined;
+    if (structuredTypes.length > 0) {
+      hint = `This document contains ${structuredTypes.join(", ")} which are NOT included in the plain text above. Use feishu_doc with action: "list_blocks" to get full content.`;
+    }
+
+    return {
+      title: infoRes.title,
+      content: contentRes.content,
+      revision_id: infoRes.revision_id,
+      block_count: blocks.length,
+      block_types: blockCounts,
+      ...(hint && { hint }),
+      _mode: "user_identity",
+    };
+  };
 
   // Main document tool with action-based dispatch
   if (toolsCfg.doc) {
@@ -474,7 +530,24 @@ export function registerFeishuDocTools(api: OpenClawPluginApi) {
         parameters: FeishuDocSchema,
         async execute(_toolCallId, params) {
           const p = params as FeishuDocParams;
+
+          // Try to use user identity for read operations
+          const userApiConfig = await getUserApiConfig();
+
           try {
+            // For read operations, prefer user identity if available
+            if (userApiConfig && p.action === "read") {
+              try {
+                return json(await userReadDoc(userApiConfig, p.doc_token));
+              } catch (userErr) {
+                // Fall back to app identity if user identity fails
+                api.logger.debug?.(
+                  `feishu_doc: user identity failed, falling back to app: ${userErr}`,
+                );
+              }
+            }
+
+            // Use app identity for all other operations or as fallback
             const client = getClient();
             switch (p.action) {
               case "read":
