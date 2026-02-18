@@ -55,7 +55,7 @@ probe_ok=false
 for i in $(seq 1 $PROBE_ATTEMPTS); do
   log "Health probe attempt $i/$PROBE_ATTEMPTS..."
   if RESULT=$("$NODE" ./openclaw.mjs gateway call health 2>/dev/null) \
-     && echo "$RESULT" | grep -q '"ok":true'; then
+     && echo "$RESULT" | grep -qE '"ok"\s*:\s*true'; then
     log "✅ Gateway healthy! Deployment complete."
     probe_ok=true
     break
