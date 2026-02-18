@@ -1,8 +1,19 @@
 import type * as Lark from "@larksuiteoapi/node-sdk";
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { OpenClawPluginApi, OpenClawPluginToolContext } from "openclaw/plugin-sdk";
 import { listEnabledFeishuAccounts } from "./accounts.js";
 import { createFeishuClient } from "./client.js";
+import { generateAuthCard } from "./oauth.js";
 import { resolveToolsConfig } from "./tools-config.js";
+import type { UserApiConfig } from "./user-api.js";
+import {
+  extractOpenIdFromSession,
+  buildUserApiConfig,
+  userListWikiSpaces,
+  userGetWikiNode,
+  userListWikiNodes,
+  isUserAuthorized,
+  getOAuthConfig,
+} from "./user-client.js";
 import { FeishuWikiSchema, type FeishuWikiParams } from "./wiki-schema.js";
 
 // ============ Helpers ============
@@ -21,6 +32,9 @@ type ObjType = "doc" | "sheet" | "mindnote" | "bitable" | "file" | "docx" | "sli
 const WIKI_ACCESS_HINT =
   "To grant wiki access: Open wiki space → Settings → Members → Add the bot. " +
   "See: https://open.feishu.cn/document/server-docs/docs/wiki-v2/wiki-qa#a40ad4ca";
+
+const USER_AUTH_HINT =
+  "User authorization is available. Click the authorization link to access wikis with your identity.";
 
 async function listSpaces(client: Lark.Client) {
   const res = await client.wiki.space.list({});
@@ -176,6 +190,7 @@ export function registerFeishuWikiTools(api: OpenClawPluginApi) {
   }
 
   const getClient = () => createFeishuClient(firstAccount);
+  const oauthConfig = getOAuthConfig(firstAccount);
 
   api.registerTool(
     {
@@ -184,13 +199,52 @@ export function registerFeishuWikiTools(api: OpenClawPluginApi) {
       description:
         "Feishu knowledge base operations. Actions: spaces, nodes, get, create, move, rename",
       parameters: FeishuWikiSchema,
-      async execute(_toolCallId, params) {
+      async execute(_toolCallId, params, _signal, _onUpdate, context?: OpenClawPluginToolContext) {
         const p = params as FeishuWikiParams;
+
+        // Try to get user context from session
+        const openId = extractOpenIdFromSession(context?.sessionKey);
+        let userApiConfig: UserApiConfig | null = null;
+
+        if (openId && oauthConfig) {
+          userApiConfig = await buildUserApiConfig(firstAccount, openId);
+        }
+
         try {
+          // For read operations, prefer user identity if available
+          if (userApiConfig) {
+            switch (p.action) {
+              case "spaces":
+                return json(await userListWikiSpaces(userApiConfig));
+              case "nodes":
+                return json(
+                  await userListWikiNodes(userApiConfig, p.space_id, p.parent_node_token),
+                );
+              case "get":
+                return json(await userGetWikiNode(userApiConfig, p.token));
+            }
+          }
+
+          // Fall back to app identity or handle write operations
           const client = getClient();
           switch (p.action) {
-            case "spaces":
-              return json(await listSpaces(client));
+            case "spaces": {
+              const result = await listSpaces(client);
+              // If no spaces and OAuth is available, suggest user auth
+              if (
+                result.spaces.length === 0 &&
+                oauthConfig &&
+                openId &&
+                !isUserAuthorized(openId)
+              ) {
+                return json({
+                  ...result,
+                  hint: USER_AUTH_HINT,
+                  authCard: generateAuthCard(oauthConfig, openId),
+                });
+              }
+              return json(result);
+            }
             case "nodes":
               return json(await listNodes(client, p.space_id, p.parent_node_token));
             case "get":
