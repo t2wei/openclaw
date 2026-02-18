@@ -70,10 +70,14 @@ export function generateAuthUrl(config: OAuthConfig, state?: string): string {
 
 /**
  * Exchange authorization code for access token.
+ * @param config OAuth configuration
+ * @param code Authorization code from callback
+ * @param openIdHint Optional open_id from state parameter (fallback if API doesn't return it)
  */
 export async function exchangeCodeForToken(
   config: OAuthConfig,
   code: string,
+  openIdHint?: string,
 ): Promise<{ token: UserToken; raw: TokenResponse }> {
   const base = getApiBase(config.domain);
 
@@ -124,7 +128,7 @@ export async function exchangeCodeForToken(
   const now = Date.now();
 
   const token: UserToken = {
-    openId: raw.open_id || "",
+    openId: raw.open_id || openIdHint || "",
     accessToken: raw.access_token,
     refreshToken: raw.refresh_token,
     accessTokenExpiresAt: now + raw.expires_in * 1000,

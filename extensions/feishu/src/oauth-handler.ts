@@ -40,8 +40,8 @@ export async function handleOAuthCallback(
       return { success: false, error: "Missing authorization code" };
     }
 
-    // Exchange code for token
-    const { token } = await exchangeCodeForToken(config, code);
+    // Exchange code for token, passing state as the open_id hint
+    const { token } = await exchangeCodeForToken(config, code, state || undefined);
 
     // Success!
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });

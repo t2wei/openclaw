@@ -1,0 +1,19 @@
+{
+  "gateway": {
+    "port": 18790,
+    "mode": "local",
+    "bind": "lan"
+  },
+  "channels": {
+    "feishu": {
+      "appId": "cli_a91957dbe1e19e1a",
+      "domain": "lark",
+      "connectionMode": "websocket",
+      "oauth": {
+        "enabled": true,
+        "redirectUri": "https://openclaw.oxsci.ai/feishu/oauth/callback",
+        "scopes": ["docx:document", "wiki:wiki", "drive:drive", "bitable:app"]
+      }
+    }
+  }
+}
