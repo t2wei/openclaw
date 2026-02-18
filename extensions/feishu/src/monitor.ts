@@ -1,4 +1,5 @@
 import * as http from "http";
+import { URL } from "node:url";
 import * as Lark from "@larksuiteoapi/node-sdk";
 import {
   type ClawdbotConfig,
@@ -9,8 +10,11 @@ import {
 import { resolveFeishuAccount, listEnabledFeishuAccounts } from "./accounts.js";
 import { handleFeishuMessage, type FeishuMessageEvent, type FeishuBotAddedEvent } from "./bot.js";
 import { createFeishuWSClient, createEventDispatcher } from "./client.js";
+import { handleOAuthCallback, isOAuthCallbackRequest } from "./oauth-handler.js";
+import type { OAuthConfig } from "./oauth.js";
 import { probeFeishu } from "./probe.js";
-import type { ResolvedFeishuAccount } from "./types.js";
+import type { ResolvedFeishuAccount, FeishuOAuthConfig } from "./types.js";
+import { initUserTokenStore } from "./user-token-store.js";
 
 export type MonitorFeishuOpts = {
   config?: ClawdbotConfig;
@@ -200,12 +204,49 @@ async function monitorWebhook({
 
   const port = account.config.webhookPort ?? 3000;
   const path = account.config.webhookPath ?? "/feishu/events";
+  const oauthCallbackPath = "/feishu/oauth/callback";
+
+  // Initialize OAuth token store if OAuth is enabled
+  const oauthConfig = (account.config as { oauth?: FeishuOAuthConfig }).oauth;
+  if (oauthConfig?.enabled) {
+    initUserTokenStore({ storagePath: oauthConfig.tokenStorePath });
+    log(`feishu[${accountId}]: OAuth enabled, token store initialized`);
+  }
 
   log(`feishu[${accountId}]: starting Webhook server on port ${port}, path ${path}...`);
 
   const server = http.createServer();
   const webhookHandler = Lark.adaptDefault(path, eventDispatcher, { autoChallenge: true });
-  server.on("request", (req, res) => {
+
+  server.on("request", async (req, res) => {
+    // Check if this is an OAuth callback
+    if (oauthConfig?.enabled && isOAuthCallbackRequest(req, oauthCallbackPath)) {
+      log(`feishu[${accountId}]: handling OAuth callback`);
+      const oauthCfg: OAuthConfig = {
+        appId: account.appId!,
+        appSecret: account.appSecret!,
+        domain: account.domain,
+        redirectUri: oauthConfig.redirectUri || "",
+        scopes: oauthConfig.scopes,
+      };
+      try {
+        const result = await handleOAuthCallback(req, res, oauthCfg);
+        if (result.success) {
+          log(`feishu[${accountId}]: OAuth successful for user ${result.openId}`);
+        } else {
+          error(`feishu[${accountId}]: OAuth failed: ${result.error}`);
+        }
+      } catch (err) {
+        error(`feishu[${accountId}]: OAuth handler error: ${String(err)}`);
+        if (!res.writableEnded) {
+          res.writeHead(500);
+          res.end("Internal Server Error");
+        }
+      }
+      return;
+    }
+
+    // Otherwise, handle as webhook event
     const guard = installRequestBodyLimitGuard(req, res, {
       maxBytes: FEISHU_WEBHOOK_MAX_BODY_BYTES,
       timeoutMs: FEISHU_WEBHOOK_BODY_TIMEOUT_MS,
