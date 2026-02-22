@@ -142,15 +142,23 @@ export async function startTelegramWebhook(opts: {
   await new Promise<void>((resolve) => server.listen(port, host, resolve));
   runtime.log?.(`webhook listening on ${publicUrl}`);
 
-  const shutdown = () => {
-    server.close();
+  const shutdown = async () => {
+    await new Promise<void>((resolve, reject) => {
+      server.close((err) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve();
+        }
+      });
+    });
     void bot.stop();
     if (diagnosticsEnabled) {
       stopDiagnosticHeartbeat();
     }
   };
   if (opts.abortSignal) {
-    opts.abortSignal.addEventListener("abort", shutdown, { once: true });
+    opts.abortSignal.addEventListener("abort", () => void shutdown(), { once: true });
   }
 
   return { server, bot, stop: shutdown };
