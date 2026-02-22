@@ -165,6 +165,17 @@ export async function monitorTelegramProvider(opts: MonitorTelegramOpts = {}) {
         abortSignal: opts.abortSignal,
         publicUrl: opts.webhookUrl,
       });
+      // Keep the provider running until abortSignal is triggered
+      // This prevents channel manager from treating webhook mode as "exited"
+      if (opts.abortSignal) {
+        await new Promise<void>((resolve) => {
+          if (opts.abortSignal!.aborted) {
+            resolve();
+            return;
+          }
+          opts.abortSignal!.addEventListener("abort", () => resolve(), { once: true });
+        });
+      }
       return;
     }
 
