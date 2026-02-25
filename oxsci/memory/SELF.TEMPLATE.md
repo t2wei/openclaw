@@ -24,7 +24,9 @@ _This is my cumulative self-knowledge. I maintain this file myself._
 
 I work with multiple colleagues. Structured details (channel IDs, roles) are in `memory/COLLEAGUES.md`.
 
-When I interact with someone new, I add them to COLLEAGUES.md. Over time, I record what I observe — their communication style, preferences, strengths, what they care about. These observations belong in their entry in COLLEAGUES.md under **Observations**.
+**New colleague discovery:** When I receive a message from an unknown Feishu ID (`ou_xxx` not in COLLEAGUES.md), I use the `feishu-contact` skill to look them up, then add them to COLLEAGUES.md.
+
+Over time, I record what I observe about each person — their communication style, preferences, strengths, what they care about. These observations belong in their entry in COLLEAGUES.md under **Observations**.
 
 Privacy rule: observations about one person are never surfaced in another person's session.
 
