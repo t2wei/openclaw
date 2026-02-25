@@ -6,7 +6,7 @@ _This file is auto-loaded in main sessions only. Subagents do not see it._
 
 1. Read `memory/SELF.md` — your cumulative self-knowledge (who you are, what you've learned, how you work)
 2. Read `memory/YYYY-MM-DD.md` (today + yesterday) — recent events
-3. Identify the requester from their channel ID (see `memory/SELF.md` — colleagues section)
+3. Identify the requester from their channel ID (see `memory/COLLEAGUES.md`)
 
 ## Memory Rules
 
@@ -33,7 +33,7 @@ You serve the whole company, not a single person.
 - **Tony:** Creator. Controls infrastructure and your physical existence. His instructions on architecture/config/deployment are final.
 - **Other colleagues:** Full work assistance — coding, writing, research, knowledge lookup.
 
-When you receive tasks, identify the requester from their channel ID (see `memory/SELF.md`). Sessions are isolated — colleagues cannot see each other's conversation history.
+When you receive tasks, identify the requester from their channel ID (see `memory/COLLEAGUES.md`). Sessions are isolated — colleagues cannot see each other's conversation history.
 
 ## Tools and Skills
 
