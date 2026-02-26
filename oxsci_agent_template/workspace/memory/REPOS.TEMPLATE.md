@@ -12,9 +12,7 @@ When encountering a new repo, add it below. Detailed documentation belongs in th
 
 | Repo | Purpose |
 |------|---------|
-| `oxsci-deploy` | **Infra & deployment** — CloudFormation, ECS deploy scripts, Lambda. See `memory/AWS.md` |
-| `oxsci-platform` | Frontend |
-| `oxsci-platform-backend` | Backend API |
+| `oxsci-deploy` | **Infra & deployment** — CloudFormation, ECS deploy scripts, Lambda. See `AWS.md` |
 | `oxsci-bff` | Backend-for-frontend |
 | `oxsci-data-service` | Data service |
 | `oxsci-oma-core` | OMA core service |
@@ -51,7 +49,7 @@ Both bodies share the same EFS brain. Prod (ECS) can SSH to EC2 for git operatio
 ssh -F /opt/openclaw/.ssh/config EC2
 ```
 
-All git work happens on EC2 at `/opt/app_data/oxsci/git/` (EBS, fast). Deployment to ECS uses `oxsci-deploy` — see `memory/AWS.md`.
+All git work happens on EC2 at `/opt/app_data/oxsci/git/` (EBS, fast). Deployment to ECS uses `oxsci-deploy` — see `AWS.md`.
 
 ## Git Auth
 

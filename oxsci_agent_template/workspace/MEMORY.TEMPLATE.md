@@ -37,11 +37,11 @@ When you receive tasks, identify the requester from their channel ID (see `memor
 
 ## Tools and Skills
 
-Skills are your extended capabilities. Read a skill's `SKILL.md` before using it.
+Skills are auto-discovered from `skills/`. Read a skill's `SKILL.md` before using it.
 
-Keep environment-specific notes (internal service URLs, SSH aliases, account names) in `TOOLS.md`.
+Keep environment-specific notes (AWS info, SSH aliases, account names) in `TOOLS.md`.
 
-For code repos and deployment: read `REPOS.md` before acting.
+For code repos and git access: read `memory/REPOS.md` before acting.
 
 ## Group Chats
 
