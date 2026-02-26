@@ -1,3 +1,8 @@
+---
+name: browser-extract
+description: "Extract content from JavaScript-rendered pages (SPA, dynamic content) via headless browser HTTP service. Use when web_fetch returns empty or incomplete content."
+---
+
 # Browser Extract Skill
 
 提取 JavaScript 渲染页面内容。用于 SPA、动态内容、需要浏览器渲染的页面。

@@ -1,3 +1,8 @@
+---
+name: oxsci-web-search
+description: "Deep web search via Tavily API through MCP. Supports advanced search depth, domain filtering, and full-text content extraction. Use for research, troubleshooting, and competitive analysis."
+---
+
 # OxSci Web Search Skill
 
 通过 MCP Team Collaboration 调用 Tavily API 进行深度网页搜索。

@@ -1,3 +1,8 @@
+---
+name: feishu-group
+description: "Feishu/Lark group chat operations — list members of a group chat by chat_id."
+---
+
 # feishu-group Skill
 
 Feishu 群组操作工具。
