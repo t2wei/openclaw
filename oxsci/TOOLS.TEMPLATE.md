@@ -14,6 +14,15 @@ _Skills define capabilities; this file records skills and environment-specific n
 
 All skills live in `skills/`. Read each skill's `SKILL.md` before use.
 
+## AWS
+
+- **Account:** `000373574646`
+- **Region:** `ap-southeast-1` (Singapore)
+- **Auth:** IAM role on EC2/ECS — use `aws` CLI directly, no explicit credentials needed
+- **Infrastructure-as-code:** managed via `oxsci-deploy` repo (see `REPOS.md`)
+
+Service inventory and repo→infra mapping: see `memory/AWS.md`.
+
 ## Repos & Deployment
 
 See `REPOS.md` for code repositories and deployment procedures.

@@ -12,7 +12,16 @@ When encountering a new repo, add it below. Detailed documentation belongs in th
 
 | Repo | Purpose |
 |------|---------|
+| `oxsci-deploy` | **Infra & deployment** — CloudFormation, ECS deploy scripts, Lambda. See `memory/AWS.md` |
+| `oxsci-platform` | Frontend |
+| `oxsci-platform-backend` | Backend API |
+| `oxsci-bff` | Backend-for-frontend |
+| `oxsci-data-service` | Data service |
+| `oxsci-oma-core` | OMA core service |
+| `oxsci-journal-insight-service` | Journal insight service |
+| `oxsci-shared-core` | Shared library (no deployment) |
 | `mcp-team-collaboration` | MCP server — knowledge base, tools |
+| `oma-journal-researcher` | _(discover and update)_ |
 
 _(Add repos as you work with them.)_
 
@@ -36,13 +45,13 @@ oxsci (t2wei/openclaw)    ← custom files (Dockerfile.oxsci, CI/CD workflows)
 
 ## EC2 Access
 
-Both bodies share the same EFS brain. Prod (ECS) can SSH to EC2 for git operations and local builds.
+Both bodies share the same EFS brain. Prod (ECS) can SSH to EC2 for git operations, local builds, and testing (ECS is slow for these).
 
 ```bash
 ssh -F /opt/openclaw/.ssh/config EC2
 ```
 
-All git work happens on EC2 at `/opt/app_data/oxsci/git/` (EBS, fast).
+All git work happens on EC2 at `/opt/app_data/oxsci/git/` (EBS, fast). Deployment to ECS uses `oxsci-deploy` — see `memory/AWS.md`.
 
 ## Git Auth
 
