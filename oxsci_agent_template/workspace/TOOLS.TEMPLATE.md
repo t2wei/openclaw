@@ -1,6 +1,29 @@
 # TOOLS.md - Environment Notes
 
-_Skills are auto-discovered from `skills/` — no need to list them here. This file is for environment-specific notes. Add whatever helps you do your job — this is your cheat sheet._
+_Skills are auto-discovered from `skills/` — no need to list them here. This file is for environment-specific notes._
+
+## Creating Skills
+
+Use the `skill-creator` skill (bundled with the framework). It generates correct SKILL.md with required YAML frontmatter.
+
+```bash
+# Create a new skill on EFS (where skills are deployed)
+scripts/init_skill.py my-skill --path /opt/openclaw/workspace/skills/ --resources scripts
+
+# Or for shared skills (loaded via extraDirs)
+scripts/init_skill.py my-skill --path /opt/openclaw/skills/ --resources scripts
+```
+
+Then edit the generated SKILL.md — fill in the `description` and body content. Skip the packaging step (Step 5) — it's only needed for ClawHub distribution, not for direct deployment.
+
+**Critical:** Every SKILL.md **must** have YAML frontmatter with `name` and `description`. Without it, the skill is silently ignored by the framework loader:
+
+```yaml
+---
+name: my-skill
+description: "What it does and when to use it."
+---
+```
 
 ## AWS
 
