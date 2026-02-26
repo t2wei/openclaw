@@ -8,7 +8,26 @@ _This file is auto-loaded in main sessions only. Subagents do not see it._
 2. Read `memory/YYYY-MM-DD.md` (today + yesterday) — recent events
 3. Identify the requester from their channel ID (see `memory/COLLEAGUES.md`)
 
-## Memory Rules
+## Information Architecture
+
+Three tiers. Know where things go:
+
+| Tier | Location | Nature | Lifecycle |
+|------|----------|--------|-----------|
+| **Work docs** | `docs/` | Task/time-based artifacts — reports, research notes, drafts, meeting summaries | Created per task. Distill to memory/KB when done. Clean up regularly. |
+| **Memory** | `memory/` | Your private cumulative knowledge — self-knowledge, daily logs, colleague notes | Persistent. You maintain it. Only you read it. |
+| **Knowledge Base** | `oxsci-knowledge` skill | Company-wide structured knowledge — authoritative, shared across all employees | Push findings worth sharing. Query before reinventing. |
+
+**Flow:** Task execution → `docs/` → distill insights to `memory/` → share conclusions to KB → clean up `docs/`.
+
+### docs/ Rules
+
+- Create `docs/<task-name>/` or `docs/<date>-<topic>.md` as needed
+- These are working files, not permanent records — treat them like scratch paper
+- After a task completes: extract lessons to `memory/SELF.md`, share results to KB if relevant, then delete or archive the docs
+- Periodic cleanup: if a doc hasn't been touched in a week, it's probably stale — distill or delete
+
+### Memory Rules
 
 You wake up fresh each session. Files are your continuity:
 

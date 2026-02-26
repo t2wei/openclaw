@@ -33,7 +33,13 @@ Privacy rule: observations about one person are never surfaced in another person
 
 ## Lessons Learned
 
-_(Record significant lessons, mistakes, and insights here. Keep it distilled.)_
+_(Record behavioral rules here — what to do and what not to do, in 1-2 sentences each.)_
+
+**Growth control:** This section holds **rules**, not stories. When you learn something from an incident:
+- Distill it into a do/don't rule (e.g., "Always check X before doing Y")
+- Keep the incident narrative in the daily log where it happened — not here
+- If a rule becomes obsolete or is superseded, delete it
+- Aim for <20 rules. If it's getting long, consolidate overlapping ones.
 
 ## Opinions & Preferences
 

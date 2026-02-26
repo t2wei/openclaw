@@ -48,3 +48,12 @@ Code repo (push) → oxsci-deploy/ecs_deploy/scripts/deploy-service.sh → ECR �
 | S3 | Static assets, data storage |
 
 _(Add services as you encounter them. Query `oxsci-knowledge` for deep details.)_
+
+## Internal Service Endpoints
+
+| Service | Address | Protocol | Notes |
+|---------|---------|----------|-------|
+| MCP Team Collaboration | `mcp-team-collaboration-prod.oxsci.internal:8060` | JSONRPC (`POST /jsonrpc`) | Knowledge base queries |
+| Data Service | `data-service-prod.oxsci.internal:8008` | REST (OpenAPI) | Persistent data, ECS management API |
+
+_(Update as services change. These are AWS internal DNS names, only reachable from within the VPC.)_
