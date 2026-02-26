@@ -25,6 +25,15 @@ description: "What it does and when to use it."
 ---
 ```
 
+## Feishu / Lark Suite
+
+Bot config `domain: lark` — API calls go through `open.larksuite.com`. Both feishu.cn and larksuite.com (including jp.larksuite.com) links work. Token extraction is path-based, domain doesn't matter:
+
+- `https://xxx.feishu.cn/wiki/ABC123` → token `ABC123`
+- `https://jp.larksuite.com/wiki/ABC123` → token `ABC123` (same)
+
+The built-in feishu-doc/feishu-wiki/feishu-drive skills show feishu.cn examples but work identically with Lark Suite URLs.
+
 ## AWS
 
 - **Account:** `000373574646`
