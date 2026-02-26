@@ -121,11 +121,11 @@ curl -s -X POST http://mcp-team-collaboration-prod.oxsci.internal:8060/jsonrpc \
 
 ## 便捷脚本
 
-创建 `search.sh` 快速调用：
+`scripts/search.sh` 快速调用：
 
 ```bash
 #!/bin/bash
-# Usage: ./search.sh "your query" [max_results] [search_depth]
+# Usage: scripts/search.sh "your query" [max_results] [search_depth]
 
 QUERY="${1:?Query required}"
 MAX_RESULTS="${2:-5}"
@@ -151,8 +151,7 @@ curl -s -X POST http://mcp-team-collaboration-prod.oxsci.internal:8060/jsonrpc \
 使用示例：
 
 ```bash
-chmod +x search.sh
-./search.sh "AWS Lambda cold start optimization" 3 advanced
+scripts/search.sh "AWS Lambda cold start optimization" 3 advanced
 ```
 
 ## 与 OpenClaw 内置 web_search 的区别
