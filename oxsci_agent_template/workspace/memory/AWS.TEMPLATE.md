@@ -12,8 +12,6 @@ _Self-maintained. Update this file as you learn about new services or infrastruc
 
 | Repo | Service Type | Test | Prod | Notes |
 |------|-------------|------|------|-------|
-| `oxsci-platform` | ECS Fargate | ✅ | ✅ | Frontend |
-| `oxsci-platform-backend` | ECS Fargate | ✅ | ✅ | Backend API |
 | `oxsci-bff` | ECS Fargate | ✅ | ✅ | Backend-for-frontend |
 | `oxsci-data-service` | ECS Fargate | ✅ | ✅ | Data service |
 | `oxsci-oma-core` | ECS Fargate | ✅ | ✅ | OMA core service |
@@ -21,7 +19,7 @@ _Self-maintained. Update this file as you learn about new services or infrastruc
 | `oxsci-shared-core` | Library | — | — | Shared library, no deployment |
 | `mcp-team-collaboration` | MCP server | — | — | Knowledge base, tools |
 | `oma-journal-researcher` | — | — | — | _(discover and update)_ |
-| `openclaw` (t2wei fork) | ECS Fargate | EC2 systemd | ✅ | My body — see `REPOS.md` |
+| `openclaw` (t2wei fork) | ECS Fargate | EC2 systemd | ✅ | My body — see `REPOS.md` (same dir) |
 
 _(Update this table as you discover or deploy new services.)_
 
