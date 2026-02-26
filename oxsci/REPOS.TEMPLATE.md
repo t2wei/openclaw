@@ -3,17 +3,25 @@
 ## OxSci Product Repos
 
 - **GitHub Org:** https://github.com/OxSci-AI
-- **Access:** Owner (oxsciClaw)
-- **Working directory:** `/opt/openclaw/workspace/repos/`
+- **Working directory:** `/opt/app_data/oxsci/git/`
 - Free to clone, modify, push any repo under OxSci-AI
+
+When encountering a new repo, add it below. Detailed documentation belongs in the company knowledge base (`oxsci-knowledge` skill).
+
+### Known Repos
+
+| Repo | Purpose |
+|------|---------|
+| `mcp-team-collaboration` | MCP server — knowledge base, tools |
+
+_(Add repos as you work with them.)_
 
 ## OpenClaw (My Body)
 
 - **Fork:** https://github.com/t2wei/openclaw (from openclaw/openclaw)
-- **Access:** Collaborator
-- **Source (EBS):** `/opt/app_data/openclaw-dev/`
+- **Source (EBS):** `/opt/app_data/openclaw-dev/` — read-only reference for understanding my own mechanisms
 - **State (EFS):** `/opt/openclaw/`
-- **Modifications require Tony's instruction**
+- **Build and deployment are handled by Tony** — do not build, deploy, or restart
 
 ### Branch Strategy
 
@@ -23,56 +31,21 @@ upstream/main
 main (t2wei/openclaw)     ← upstream sync only, no custom files
     ↓ merge
 oxsci (t2wei/openclaw)    ← custom files (Dockerfile.oxsci, CI/CD workflows)
-                             prod Docker image built from this branch
     ↑ feature/*           ← new features branch from main, PR to upstream
 ```
 
-### Dev Build & Deploy
+## EC2 Access
 
-SSH to EC2: `ssh AWS_REVERSE_PROXY`
-
-```bash
-# Pull + build + restart
-bash /opt/openclaw/workspace/dev-build.sh --pull
-
-# Build only (code already updated)
-bash /opt/openclaw/workspace/dev-build.sh
-
-# Restart only
-bash /opt/openclaw/workspace/dev-build.sh --restart-only
-
-# Include UI build
-bash /opt/openclaw/workspace/dev-build.sh --pull --ui
-```
-
-Service: `systemctl --user {status|restart|stop} openclaw-gateway.service`
-
-Logs: `journalctl --user -u openclaw-gateway -f`
-
-### Upstream Sync
+Both bodies share the same EFS brain. Prod (ECS) can SSH to EC2 for git operations and local builds.
 
 ```bash
-git fetch upstream && git checkout main && git merge upstream/main && git push origin main
-git checkout oxsci && git merge main
+ssh -F /opt/openclaw/.ssh/config EC2
 ```
+
+All git work happens on EC2 at `/opt/app_data/oxsci/git/` (EBS, fast).
 
 ## Git Auth
 
 - **SSH:** `ssh -F /opt/openclaw/.ssh/config -T git@github.com`
 - **gh CLI:** `~/.config/gh/hosts.yml` (PAT-based)
-
-## Directory Layout
-
-```
-/opt/app_data/openclaw-dev/   # EBS: source + build artifacts (fast)
-/opt/openclaw/                # EFS: config + state (shared)
-├── workspace/
-│   ├── REPOS.md
-│   ├── dev-build.sh
-│   ├── skills/
-│   └── repos/
-├── config-dev.json
-└── agents/
-```
-
-File ownership: `ubuntu:ubuntu` (UID 1000:1000)
+- **git global sshCommand** already configured in `/opt/openclaw/.gitconfig`
