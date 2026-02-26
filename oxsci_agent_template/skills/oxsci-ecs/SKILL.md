@@ -1,3 +1,8 @@
+---
+name: oxsci-ecs
+description: "Manage OxSci ECS services (start, stop, restart, status) via data-service API. Use when deploying or checking service health."
+---
+
 # OxSci ECS Management Skill
 
 Control OxSci ECS services via data-service API.

@@ -1,3 +1,8 @@
+---
+name: oxsci-knowledge
+description: "Query and update the company knowledge base (MCP Team Collaboration). Use for looking up best practices, deployment guides, API docs, and shared team knowledge."
+---
+
 # OxSci Knowledge Skill
 
 查询公司知识库（MCP Team Collaboration Server）。

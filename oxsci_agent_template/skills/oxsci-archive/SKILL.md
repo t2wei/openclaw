@@ -1,3 +1,8 @@
+---
+name: oxsci-archive
+description: "Archive completed work documents (meeting summaries, research reports, decision records) to the company knowledge base as historical records."
+---
+
 # OxSci Archive Skill
 
 Archive completed work documents to the company knowledge base. This is the **historical record** layer — research reports, meeting summaries, decision logs, and other task/time-based artifacts.

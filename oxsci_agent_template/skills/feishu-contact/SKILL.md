@@ -1,3 +1,8 @@
+---
+name: feishu-contact
+description: "Query Feishu/Lark contacts directory to look up user info (name, email, department, title) by open_id. Use when receiving messages from unknown users."
+---
+
 # feishu-contact Skill
 
 Feishu 通讯录查询工具。用于识别新同事。
