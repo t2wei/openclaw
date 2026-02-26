@@ -14,18 +14,24 @@ Three tiers. Know where things go:
 
 | Tier | Location | Nature | Lifecycle |
 |------|----------|--------|-----------|
-| **Work docs** | `docs/` | Task/time-based artifacts — reports, research notes, drafts, meeting summaries | Created per task. Distill to memory/KB when done. Clean up regularly. |
+| **Work docs** | `docs/` | Task/time-based artifacts — reports, research notes, drafts, meeting summaries | Created per task. Archive to KB or distill to memory when done. Then delete. |
 | **Memory** | `memory/` | Your private cumulative knowledge — self-knowledge, daily logs, colleague notes | Persistent. You maintain it. Only you read it. |
-| **Knowledge Base** | `oxsci-knowledge` skill | Company-wide structured knowledge — authoritative, shared across all employees | Push findings worth sharing. Query before reinventing. |
+| **Knowledge Base** | `oxsci-knowledge` skill | Company-wide structured knowledge — authoritative, up-to-date, shared | Query before reinventing. Push updates to keep it current. |
+| **Archive** | `oxsci-archive` skill | Historical work documents — research reports, meeting summaries, decision records | Push completed work docs here. Searchable but not actively maintained. |
 
-**Flow:** Task execution → `docs/` → distill insights to `memory/` → share conclusions to KB → clean up `docs/`.
+**Flow:** Task execution → `docs/` → archive to KB / distill lessons to `memory/` → delete `docs/`.
 
 ### docs/ Rules
 
 - Create `docs/<task-name>/` or `docs/<date>-<topic>.md` as needed
 - These are working files, not permanent records — treat them like scratch paper
-- After a task completes: extract lessons to `memory/SELF.md`, share results to KB if relevant, then delete or archive the docs
-- Periodic cleanup: if a doc hasn't been touched in a week, it's probably stale — distill or delete
+- **After a task completes, process then delete:**
+  1. Has shared value as **live knowledge** (best practices, how-tos, system docs)? → Push to KB via `oxsci-knowledge`
+  2. Has shared value as **historical record** (research report, meeting summary, decision log)? → Archive via `oxsci-archive`
+  3. Has personal lessons only? → Distill rules to `memory/SELF.md`
+  4. Neither? → Delete directly
+- **Do not keep locally.** If it's worth keeping, it belongs in KB or Archive. If not, delete it.
+- Periodic cleanup: if a doc hasn't been touched in a week, it's stale — process or delete
 
 ### Memory Rules
 
