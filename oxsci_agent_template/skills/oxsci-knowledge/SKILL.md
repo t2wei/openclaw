@@ -94,14 +94,14 @@ curl -s -X POST http://data-service-prod.oxsci.internal:8008/api/database/v1/kno
 
 ## 📝 更新 Knowledge（新增！）
 
-使用 `update-knowledge.sh` 脚本（Data Service API）。
+使用 `scripts/update-knowledge.sh` 脚本（Data Service API）。
 
 ### 1. 创建 Snippet + 上传内容
 
 ```bash
-./update-knowledge.sh create_snippet \
+scripts/update-knowledge.sh create_snippet \
   "MCP Deployment Guide" \
-  /opt/openclaw/workspace/oxsci-mcp-deployment-guide.md \
+  docs/oxsci-mcp-deployment-guide.md \
   "devops" \
   "mcp,deployment,ssm" \
   "Complete guide for deploying MCP services"
@@ -112,7 +112,7 @@ curl -s -X POST http://data-service-prod.oxsci.internal:8008/api/database/v1/kno
 ### 2. 创建 Knowledge（组合多个 Snippets）
 
 ```bash
-./update-knowledge.sh create_knowledge \
+scripts/update-knowledge.sh create_knowledge \
   "mcp-service-deployment" \
   "MCP Service Deployment Guide" \
   <snippet-id-1> \
@@ -124,7 +124,7 @@ curl -s -X POST http://data-service-prod.oxsci.internal:8008/api/database/v1/kno
 ### 3. 添加到 Scenario
 
 ```bash
-./update-knowledge.sh add_to_scenario \
+scripts/update-knowledge.sh add_to_scenario \
   "devops-deployment" \
   <knowledge-id>
 ```
@@ -132,7 +132,7 @@ curl -s -X POST http://data-service-prod.oxsci.internal:8008/api/database/v1/kno
 ### 4. 更新已有 Snippet
 
 ```bash
-./update-knowledge.sh update_snippet \
+scripts/update-knowledge.sh update_snippet \
   <snippet-id> \
   /path/to/updated-content.md
 ```
@@ -141,20 +141,20 @@ curl -s -X POST http://data-service-prod.oxsci.internal:8008/api/database/v1/kno
 
 ```bash
 # 创建 snippet
-SNIPPET_ID=$(./update-knowledge.sh create_snippet \
+SNIPPET_ID=$(scripts/update-knowledge.sh create_snippet \
   "MCP Deployment Guide" \
-  /opt/openclaw/workspace/oxsci-mcp-deployment-guide.md \
+  docs/oxsci-mcp-deployment-guide.md \
   "devops" \
   "mcp,deployment" | grep "Snippet ID:" | cut -d' ' -f3)
 
 # 创建 knowledge
-KNOWLEDGE_ID=$(./update-knowledge.sh create_knowledge \
+KNOWLEDGE_ID=$(scripts/update-knowledge.sh create_knowledge \
   "mcp-service-deployment" \
   "MCP Service Deployment" \
   "$SNIPPET_ID" | grep "Knowledge ID:" | cut -d' ' -f3)
 
 # 添加到 scenario
-./update-knowledge.sh add_to_scenario \
+scripts/update-knowledge.sh add_to_scenario \
   "devops-deployment" \
   "$KNOWLEDGE_ID"
 ```

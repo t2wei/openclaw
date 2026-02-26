@@ -29,22 +29,22 @@ Examples:
 Creates a snippet, uploads content, and links it to an existing Knowledge category. Default priority: 9999.
 
 ```bash
-./archive.sh <knowledge_name> <title> <file_path> [tags]
+scripts/archive.sh <knowledge_name> <title> <file_path> [tags]
 ```
 
 **Examples:**
 
 ```bash
 # Archive a meeting summary
-./archive.sh archived-meeting-notes \
+scripts/archive.sh archived-meeting-notes \
   "Product Roadmap Meeting 2026-03-01" \
-  /opt/openclaw/workspace/docs/meeting-2026-03-01.md \
+  docs/meeting-2026-03-01.md \
   "meeting,product,roadmap"
 
 # Archive a research report
-./archive.sh archived-research \
+scripts/archive.sh archived-research \
   "LLM Cost Analysis Q1 2026" \
-  /opt/openclaw/workspace/docs/llm-cost-analysis.md \
+  docs/llm-cost-analysis.md \
   "research,cost,llm"
 ```
 
@@ -52,23 +52,23 @@ Creates a snippet, uploads content, and links it to an existing Knowledge catego
 
 ```bash
 # Create a new Knowledge category under oxsci-archive
-./manage.sh create_knowledge <name> <title>
+scripts/manage.sh create_knowledge <name> <title>
 
 # Link an existing snippet to a Knowledge category
-./manage.sh link_snippet <knowledge_name> <snippet_id>
+scripts/manage.sh link_snippet <knowledge_name> <snippet_id>
 
 # List Knowledge categories in oxsci-archive
-./manage.sh list
+scripts/manage.sh list
 ```
 
 **Examples:**
 
 ```bash
 # Create a new category for research reports
-./manage.sh create_knowledge archived-research "Archived Research Reports"
+scripts/manage.sh create_knowledge archived-research "Archived Research Reports"
 
 # Link an existing snippet to it
-./manage.sh link_snippet archived-research d734223c-ecec-4880-bb5c-8b5e4b0d9fac
+scripts/manage.sh link_snippet archived-research d734223c-ecec-4880-bb5c-8b5e4b0d9fac
 ```
 
 ## Existing Knowledge Categories

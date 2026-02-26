@@ -11,19 +11,19 @@ Control OxSci ECS services via data-service API.
 
 ```bash
 # Check all services status
-./status.sh
+scripts/status.sh
 
 # Start a service
-./start.sh platform-test
+scripts/start.sh platform-test
 
 # Stop a service
-./stop.sh platform-test
+scripts/stop.sh platform-test
 
 # Restart a service
-./restart.sh platform-test
+scripts/restart.sh platform-test
 
 # Start and wait until healthy
-./start-wait.sh platform-test
+scripts/start-wait.sh platform-test
 ```
 
 ## Available Services
