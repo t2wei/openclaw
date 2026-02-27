@@ -67,12 +67,13 @@ Subagent 可见的文件白名单：AGENTS.md, TOOLS.md, SOUL.md, IDENTITY.md, U
 - 默认 30 分钟定时，框架自动发送 "Read HEARTBEAT.md" prompt
 - Agent 响应 `HEARTBEAT_OK`（文本匹配，非 API 信号）表示无事
 - 空 HEARTBEAT.md = 跳过（省 token）
-- 默认 agent 自动启用，无需 config 显式配置
+- OxSci 保持 HEARTBEAT.md 为空（默认），仅在需要临时运维任务时写入内容
 
 ### Cron
 
 - Agent 自行管理（add/update/remove），支持 at/every/cron-expression
-- 与 heartbeat 区别：cron 精确定时 + 独立上下文，heartbeat 是粗粒度周期 + 主 session 内
+- 与 heartbeat 区别：cron 精确定时 + 独立上下文（isolated session），heartbeat 是粗粒度周期 + 主 session 内
+- **OxSci 用 cron 做每日记忆维护**：05:00 CST，读 `MEMORY_MAINTAIN.md` 执行（daily log 提炼、detail 更新、docs/ 清理、KB 晋升）
 
 ### Session 隔离
 
@@ -98,15 +99,22 @@ oxsci_agent_template/
 ├── workspace/           → EFS /opt/openclaw/workspace[-xxx]/
 │   ├── AGENTS.md        ← 红线 + 多用户协作 + 启动流程
 │   ├── SOUL.md          ← 独立 AI 个体人设
-│   ├── MEMORY.md        ← 运营上下文（4 层信息架构）
+│   ├── MEMORY.md        ← 运营上下文（启动指令 + 行为规范）
+│   ├── HEARTBEAT.md     ← 临时运维任务入口（平时为空）
+│   ├── MEMORY_MAINTAIN.md ← 每日记忆维护任务（cron 读取）
 │   ├── JOB.md           ← 岗位说明（按需读取）
 │   ├── TOOLS.md         ← 环境笔记
 │   ├── IDENTITY.md      ← 空
 │   ├── USER.md          ← 空
 │   └── memory/
 │       ├── SELF.md      ← 累积自我认知（行为规则 <20 条）
-│       ├── COLLEAGUES.md ← 同事档案
-│       ├── REPOS.md     ← 代码仓库
+│       ├── COLLEAGUES.md ← 同事 index（Brief：ID/Name/Role/Groups）
+│       ├── people/      ← 同事详情（Detail：完整档案 + Observations）
+│       │   ├── {user_id}.md
+│       │   └── ...
+│       ├── REPOS.md     ← 代码仓库 index
+│       ├── repos/       ← 仓库技术笔记（Detail）
+│       │   └── {repo_name}.md
 │       └── AWS.md       ← 基础设施 + 服务端点
 └── skills/              → EFS /opt/openclaw/skills/（共享）
     ├── oxsci-archive/   ← 工作文档归档到 KB
@@ -129,11 +137,128 @@ oxsci_agent_template/
 
 **Flow:** 任务 → docs/ → 推 KB 或归档 / 提炼到 memory/ → 删 docs/
 
+### Memory 记忆架构
+
+每个信息领域遵循三层数据粒度 + daily log 的统一模式：
+
+#### 三层数据粒度
+
+| 层 | 加载时机 | 增长模式 | 内容 |
+|----|---------|---------|------|
+| **Brief (Index)** | Startup 必读 | 慢（新条目才加行） | 结构化字段：ID、名称、角色、分类 |
+| **Detail** | 按需读取 | 中（持续积累） | 完整档案、观察记录、操作细节 |
+| **Deep Storage** | 按需查询 | 按需写入 | KB（共享技术知识）/ Archive（历史文档） |
+
+**Daily Log** 是独立机制，不属于三层，而是所有层的**素材来源**：
+- Brief 的事实字段从 daily log 或即时发现中提取
+- Detail 的观察/经验从 daily log 异步提炼
+- Deep Storage 的知识从 daily log 中的技术经验溢出
+
+#### 统一流程：注册 → 更新 → 消费
+
+| 阶段 | 触发 | 动作 |
+|------|------|------|
+| **注册** | 新实体发现（新同事/新 repo/新服务） | 即时：查询信息 → 写 Brief + 创建 Detail + 记 daily log |
+| **更新** | Heartbeat / session 结束 | 异步：扫 daily log → 提炼到 Detail；溢出技术知识 → KB |
+| **消费** | Session 中需要信息 | Brief 先行（已在上下文）→ 需要深入时读 Detail → 需要技术细节时查 KB |
+
+#### 按领域展开
+
+| 领域 | Brief (Index) | Detail | Deep Storage |
+|------|---------------|--------|-------------|
+| **Colleagues** | `COLLEAGUES.md`：表格（ID, Name, Role, Groups） | `memory/people/{user_id}.md`：完整档案 + Observations | 不外化（印象私有） |
+| **"我"** | `SELF.md`：Identity + 行为规则(<20) + 偏好 | Daily log 中的反思 | 不外化（性格私有） |
+| **Repos** | `REPOS.md`：repo name, purpose, org | `memory/repos/{repo_name}.md`：技术栈、分支、部署、开发笔记 | KB：架构文档、API specs |
+| **AWS** | `AWS.md`：Account、跨服务基础设施（VPC、EFS、deployment pipeline）、端点索引 | 无独立 Detail——单服务部署细节跟 `repos/{repo_name}.md` 走 | KB：IAM 策略、CloudFormation 分析、troubleshooting |
+
+**Colleagues 特殊规则：**
+- Detail 中的 Observations 是 AI 私有认知，不进 KB，不跨 session 引用
+- 注册触发：未知 Feishu ID → `feishu-contact` 查询 → 写 Brief + 创建 Detail
+
+**"我" 特殊规则：**
+- 行为规则 <20 条，溢出时按类型分流：行为准则留 SELF.md，技术知识→KB/领域 index
+- 不分离 Brief/Detail（SELF.md 本身足够小）
+
+**Repos 特殊规则：**
+
+- Detail 文件名用 repo name（仓库不改名）
+- Detail 包含代码侧 + 部署侧（技术栈、分支、ECS 配置、deploy 参数等），一个文件 = 一个服务的完整 Detail
+- Detail 是短期局部最新——AI 深入使用某 repo 某块功能后积累的技术笔记，只覆盖接触过的部分
+- KB 是全局最新——经过验证的权威知识，应反映 repo 当前真实状态
+- 溢出判断：对非 AI 同事也有参考价值（架构图、API 文档）→ KB；只是 AI 操作笔记 → 留 Detail
+- 注册触发：新 repo 发现 → 加行到 REPOS.md + 创建 `memory/repos/{repo_name}.md` + 记 daily log
+- EC2 访问、Git Auth 等跨 repo 共用信息放 TOOLS.md，不放单个 repo 的 Detail
+
+**AWS 特殊规则：**
+
+- 没有独立的 Detail 层——单服务的部署细节跟 `repos/{repo_name}.md` 走
+- AWS.md 只放跨服务共用信息：Account、VPC 级 deployment flow、内部端点索引、服务清单
+- 溢出到 KB：IAM 策略详解、CloudFormation 模板分析、网络拓扑、troubleshooting
+- AWS.md 某个 section 超过 ~30 行时，考虑提炼到 KB 并留指引
+
+#### Workspace 文件结构
+
+```
+memory/
+├── SELF.md              ← Brief+Detail 合一（"我"）
+├── COLLEAGUES.md        ← Brief only（同事 index）
+├── people/              ← Detail（同事详情）
+│   ├── {user_id}.md
+│   └── ...
+├── REPOS.md             ← Brief only（代码仓库 index）
+├── repos/               ← Detail（仓库技术笔记）
+│   ├── openclaw.md
+│   └── ...
+├── AWS.md               ← Index only（跨服务基础设施）
+└── YYYY-MM-DD.md        ← Daily log（独立机制）
+```
+
 ### 文件组织原则
 
 - **根目录：** 基础、很少变（AGENTS, SOUL, TOOLS — subagent 可见；MEMORY — 仅主 session）
 - **memory/：** 自维护、持续演化、不自动加载
 - **第三人称指令（你写的）** vs **第一人称（AI 自己写的）**
+
+### 记忆更新触发机制
+
+记忆更新依赖三层机制：
+
+#### 1. Session 内即时更新
+
+- **触发：** 工作过程中发现新实体或新事实
+- **机制：** 提示词驱动（各 Brief 文件头部的流程指引 + MEMORY.md Daily Log section）
+- **动作：** 写 daily log、注册新实体到 index + 创建 detail
+- **特点：** 同步、嵌入工作流、几行字
+
+#### 2. Session 结束异步提炼
+
+- **触发：** 对话结束或进入安静期
+- **机制：** 提示词驱动（MEMORY.md Daily Log section 的"Async"规则）
+- **动作：** 从 daily log 提炼 → detail（impressions、technical notes）、SELF.md（behavioral rules）
+- **局限：** AI 没有明确的 "session 结束" 信号——只能靠对话自然收尾
+- **现实：** 这一步可能被跳过（用户突然离开），daily cron 是兜底
+
+#### 3. Daily Maintenance Cron（核心保障）
+
+- **触发：** 每日 05:00 CST，cron job（isolated session）
+- **机制：** 框架内建 cron + `MEMORY_MAINTAIN.md` 定义具体任务
+- **动作：** 扫 daily log → 提炼到 detail（只处理尚未反映的新内容）；SELF.md overflow 检查；detail → KB 晋升；docs/ 清理；commit & push
+- **增量策略：** cron 在 isolated session 执行，每次读 daily log + 对应 detail 文件，由 LLM 对比判断哪些是新内容。重复提炼无害（idempotent）
+- **Bootstrap：** MEMORY.md 要求 agent 启动时检查 cron 是否存在，不存在则自动创建
+
+#### Heartbeat（框架默认，OxSci 保持空）
+
+- 框架每 30 分钟发送 heartbeat prompt，agent 读 HEARTBEAT.md
+- OxSci 的 HEARTBEAT.md 保持空 → 框架自动跳过（省 token）
+- 仅在需要临时运维任务时写入内容（一次性任务，处理完清空）
+
+#### 设计原则
+
+- **提示词驱动即时更新：** Session 内的 index 注册和 daily log 写入靠提示词，因为框架不提供 session lifecycle 事件
+- **各 Brief 文件自包含流程：** 注册、更新的具体动作写在对应 Brief 文件头部（COLLEAGUES.md、REPOS.md、AWS.md），MEMORY.md 只定义通用原则
+- **Cron 是记忆维护的核心保障：** 每日定时、isolated session、不污染主 session token、精确执行一次
+- **HEARTBEAT.md 是临时运维入口：** 只在需要时写入，平时为空
+- **兜底机制：** session 结束提炼可能被跳过 → daily cron 兜底 → 最坏情况 daily log 原始数据不丢
 
 ## 标准流程
 

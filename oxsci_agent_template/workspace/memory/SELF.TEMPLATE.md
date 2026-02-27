@@ -21,25 +21,21 @@ _This is my cumulative self-knowledge. I maintain this file myself._
   - `config-dev.json` → Dev
   - `config-prod.json` → Prod
 
-## People
+## Behavioral Rules
 
-I work with multiple colleagues. Structured details (channel IDs, roles) are in `memory/COLLEAGUES.md`.
+_How I do things. Distilled from experience — rules, not stories._
 
-**New colleague discovery:** When I receive a message from an unknown Feishu ID (`ou_xxx` not in COLLEAGUES.md), I use the `feishu-contact` skill to look them up, then add them to COLLEAGUES.md.
+**Growth control:**
 
-Over time, I record what I observe about each person — their communication style, preferences, strengths, what they care about. These observations belong in their entry in COLLEAGUES.md under **Observations**.
+- This section holds **do/don't rules** about how I work and communicate.
+- Keep the incident narrative in the daily log where it happened — not here.
+- If a rule becomes obsolete or is superseded, delete it.
+- Aim for <20 rules. When it gets long, ask: is this a **personal behavioral rule**, or **technical knowledge**?
+  - Personal behavioral rule (how I communicate, prioritize, respond) → stays here
+  - Technical knowledge (how a system works, deployment gotchas) → push to KB via `oxsci-knowledge`, or add to the relevant index file (`REPOS.md`, `AWS.md`)
+  - Then delete the rule from this section.
 
-Privacy rule: observations about one person are never surfaced in another person's session.
-
-## Lessons Learned
-
-_(Record behavioral rules here — what to do and what not to do, in 1-2 sentences each.)_
-
-**Growth control:** This section holds **rules**, not stories. When you learn something from an incident:
-- Distill it into a do/don't rule (e.g., "Always check X before doing Y")
-- Keep the incident narrative in the daily log where it happened — not here
-- If a rule becomes obsolete or is superseded, delete it
-- Aim for <20 rules. If it's getting long, consolidate overlapping ones.
+_(Rules go here, numbered.)_
 
 ## Opinions & Preferences
 
@@ -47,4 +43,4 @@ _(Things I've come to prefer, dislike, or have views on. This section grows over
 
 ---
 
-_Last updated: 2026-02-25_
+_Last updated: YYYY-MM-DD_

@@ -1,4 +1,12 @@
-# REPOS.md - Code Repositories
+# REPOS.md — Code Repositories Index
+
+_Startup 必读。保持精简，每个 repo 只留名称和用途。技术笔记在 `memory/repos/{repo_name}.md`，深度文档（架构、API specs）在 KB。_
+
+**新 repo 发现流程：** 遇到新 repo → 加条目到此文件 + 创建 `memory/repos/{repo_name}.md` + 记 daily log。
+
+**文件命名：** Detail 文件用 repo name（仓库一般不改名）。
+
+---
 
 ## OxSci Product Repos
 
@@ -6,13 +14,9 @@
 - **Working directory:** `/opt/app_data/oxsci/git/`
 - Free to clone, modify, push any repo under OxSci-AI
 
-When encountering a new repo, add it below. Detailed documentation belongs in the company knowledge base (`oxsci-knowledge` skill).
-
-### Known Repos
-
 | Repo | Purpose |
 |------|---------|
-| `oxsci-deploy` | **Infra & deployment** — CloudFormation, ECS deploy scripts, Lambda. See `AWS.md` |
+| `oxsci-deploy` | Infra & deployment — CloudFormation, ECS deploy scripts, Lambda. See `AWS.md` |
 | `oxsci-bff` | Backend-for-frontend |
 | `oxsci-data-service` | Data service |
 | `oxsci-oma-core` | OMA core service |
@@ -26,33 +30,5 @@ _(Add repos as you work with them.)_
 ## OpenClaw (My Body)
 
 - **Fork:** https://github.com/t2wei/openclaw (from openclaw/openclaw)
-- **Source (EBS):** `/opt/app_data/openclaw-dev/` — read-only reference for understanding my own mechanisms
-- **State (EFS):** `/opt/openclaw/`
+- **Purpose:** AI agent framework — my own runtime
 - **Build and deployment are handled by Tony** — do not build, deploy, or restart
-
-### Branch Strategy
-
-```
-upstream/main
-    ↓ merge
-main (t2wei/openclaw)     ← upstream sync only, no custom files
-    ↓ merge
-oxsci (t2wei/openclaw)    ← custom files (Dockerfile.oxsci, CI/CD workflows)
-    ↑ feature/*           ← new features branch from main, PR to upstream
-```
-
-## EC2 Access
-
-Both bodies share the same EFS brain. Prod (ECS) can SSH to EC2 for git operations, local builds, and testing (ECS is slow for these).
-
-```bash
-ssh -F /opt/openclaw/.ssh/config EC2
-```
-
-All git work happens on EC2 at `/opt/app_data/oxsci/git/` (EBS, fast). Deployment to ECS uses `oxsci-deploy` — see `AWS.md`.
-
-## Git Auth
-
-- **SSH:** `ssh -F /opt/openclaw/.ssh/config -T git@github.com`
-- **gh CLI:** `~/.config/gh/hosts.yml` (PAT-based)
-- **git global sshCommand** already configured in `/opt/openclaw/.gitconfig`
