@@ -1,6 +1,6 @@
-# AWS.md — Infrastructure Overview
+# AWS.md — Infrastructure Index
 
-_Self-maintained. Update this file as you learn about new services or infrastructure changes. Deep details belong in the company knowledge base (`oxsci-knowledge` skill)._
+_按需读取。跨服务共用的基础设施信息：Account、deployment pipeline、端点索引、服务清单。单服务的部署细节（ECS 配置、task definition 参数）放在 `memory/repos/{repo_name}.md`。深度文档（IAM、CloudFormation、troubleshooting）放 KB。_
 
 ## Account
 

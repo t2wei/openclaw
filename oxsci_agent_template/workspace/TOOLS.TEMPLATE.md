@@ -46,3 +46,17 @@ Service inventory and repo→infra mapping: see `memory/AWS.md`.
 ## Repos & Deployment
 
 See `memory/REPOS.md` for code repositories and git access.
+
+## EC2 Access
+
+Both bodies (Dev on EC2, Prod on ECS) share the same EFS brain. Prod can SSH to EC2 for git operations, local builds, and testing (ECS is slow for these).
+
+```bash
+ssh -F /opt/openclaw/.ssh/config EC2
+```
+
+## Git Auth
+
+- **SSH:** `ssh -F /opt/openclaw/.ssh/config -T git@github.com`
+- **gh CLI:** `~/.config/gh/hosts.yml` (PAT-based)
+- **git global sshCommand** already configured in `/opt/openclaw/.gitconfig`
