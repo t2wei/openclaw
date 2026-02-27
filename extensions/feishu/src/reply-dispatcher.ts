@@ -77,6 +77,10 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
 
   let typingState: TypingIndicatorState | null = null;
   const typingCallbacks = createTypingCallbacks({
+    // Feishu uses emoji reactions as typing indicators (no native typing API).
+    // Unlike Telegram/Discord, reactions are persistent and don't auto-expire,
+    // so keepalive re-sends are unnecessary and cause repeated notifications.
+    keepaliveIntervalMs: 0,
     start: async () => {
       // Check if typing indicator is enabled (default: true)
       if (!(account.config.typingIndicator ?? true)) {
