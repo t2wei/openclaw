@@ -496,10 +496,7 @@ export function parseFeishuMessageEvent(
 }
 
 export function buildFeishuAgentBody(params: {
-  ctx: Pick<
-    FeishuMessageContext,
-    "content" | "senderName" | "senderOpenId" | "mentionTargets" | "messageId"
-  >;
+  ctx: Pick<FeishuMessageContext, "content" | "senderName" | "senderOpenId" | "mentionTargets">;
   quotedContent?: string;
   permissionErrorForAgent?: PermissionError;
 }): string {
@@ -514,12 +511,8 @@ export function buildFeishuAgentBody(params: {
   messageBody = `${speaker}: ${messageBody}`;
 
   if (ctx.mentionTargets && ctx.mentionTargets.length > 0) {
-    const targetNames = ctx.mentionTargets.map((t) => t.name).join(", ");
-    messageBody += `\n\n[System: Your reply will automatically @mention: ${targetNames}. Do not write @xxx yourself.]`;
+    messageBody += `\n\n[System: Reply auto-mentions the @'d users above.]`;
   }
-
-  // Keep message_id on its own line so shared message-id hint stripping can parse it reliably.
-  messageBody = `[message_id: ${ctx.messageId}]\n${messageBody}`;
 
   if (permissionErrorForAgent) {
     const grantUrl = permissionErrorForAgent.grantUrl ?? "";
@@ -920,7 +913,7 @@ export async function handleFeishuMessage(params: {
       SessionKey: route.sessionKey,
       AccountId: route.accountId,
       ChatType: isGroup ? "group" : "direct",
-      GroupSubject: isGroup ? ctx.chatId : undefined,
+      ConversationLabel: isGroup ? ctx.chatId : undefined,
       SenderName: ctx.senderName ?? ctx.senderOpenId,
       SenderId: ctx.senderOpenId,
       Provider: "feishu" as const,

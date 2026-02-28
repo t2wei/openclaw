@@ -62,13 +62,12 @@ async function dispatchMessage(params: { cfg: ClawdbotConfig; event: FeishuMessa
 }
 
 describe("buildFeishuAgentBody", () => {
-  it("builds message id, speaker, quoted content, mentions, and permission notice in order", () => {
+  it("builds speaker, quoted content, mentions, and permission notice in order", () => {
     const body = buildFeishuAgentBody({
       ctx: {
         content: "hello world",
         senderName: "Sender Name",
         senderOpenId: "ou-sender",
-        messageId: "msg-42",
         mentionTargets: [{ openId: "ou-target", name: "Target User", key: "@_user_1" }],
       },
       quotedContent: "previous message",
@@ -80,7 +79,7 @@ describe("buildFeishuAgentBody", () => {
     });
 
     expect(body).toBe(
-      '[message_id: msg-42]\nSender Name: [Replying to: "previous message"]\n\nhello world\n\n[System: Your reply will automatically @mention: Target User. Do not write @xxx yourself.]\n\n[System: The bot encountered a Feishu API permission error. Please inform the user about this issue and provide the permission grant URL for the admin to authorize. Permission grant URL: https://open.feishu.cn/app/cli_test]',
+      'Sender Name: [Replying to: "previous message"]\n\nhello world\n\n[System: Reply auto-mentions the @\'d users above.]\n\n[System: The bot encountered a Feishu API permission error. Please inform the user about this issue and provide the permission grant URL for the admin to authorize. Permission grant URL: https://open.feishu.cn/app/cli_test]',
     );
   });
 });
@@ -443,7 +442,7 @@ describe("handleFeishuMessage command authorization", () => {
     );
   });
 
-  it("includes message_id in BodyForAgent on its own line", async () => {
+  it("includes speaker prefix in BodyForAgent", async () => {
     mockShouldComputeCommandAuthorized.mockReturnValue(false);
 
     const cfg: ClawdbotConfig = {
@@ -473,7 +472,7 @@ describe("handleFeishuMessage command authorization", () => {
 
     expect(mockFinalizeInboundContext).toHaveBeenCalledWith(
       expect.objectContaining({
-        BodyForAgent: "[message_id: msg-message-id-line]\nou-msgid: hello",
+        BodyForAgent: "ou-msgid: hello",
       }),
     );
   });
