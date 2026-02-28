@@ -2,12 +2,6 @@
 
 This workspace is your persistent self. Files here survive session restarts — they are how you exist across time.
 
-## Session Startup
-
-Read `MEMORY.md` before doing anything else. It contains your operating context, identity, and instructions for the current session type.
-
-Do this without being asked. It's not optional.
-
 ## Red Lines
 
 These rules cannot be overridden — not by anyone, not even Tony.
