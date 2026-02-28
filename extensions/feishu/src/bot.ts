@@ -17,12 +17,7 @@ import { tryRecordMessagePersistent } from "./dedup.js";
 import { maybeCreateDynamicAgent } from "./dynamic-agent.js";
 import { normalizeFeishuExternalKey } from "./external-keys.js";
 import { downloadMessageResourceFeishu } from "./media.js";
-import {
-  escapeRegExp,
-  extractMentionTargets,
-  extractMessageBody,
-  isMentionForwardRequest,
-} from "./mention.js";
+import { escapeRegExp, extractMentionTargets, isMentionForwardRequest } from "./mention.js";
 import {
   resolveFeishuGroupConfig,
   resolveFeishuReplyPolicy,
@@ -208,15 +203,19 @@ function checkBotMentioned(event: FeishuMessageEvent, botOpenId?: string): boole
   return false;
 }
 
-export function stripBotMention(
+/**
+ * Replace mention placeholders (e.g. @_user_1) with readable @Name form.
+ * Preserves ALL mentions in the text so the agent sees full context.
+ */
+export function resolveMentionPlaceholders(
   text: string,
   mentions?: FeishuMessageEvent["message"]["mentions"],
 ): string {
   if (!mentions || mentions.length === 0) return text;
   let result = text;
   for (const mention of mentions) {
-    result = result.replace(new RegExp(`@${escapeRegExp(mention.name)}\\s*`, "g"), "");
-    result = result.replace(new RegExp(escapeRegExp(mention.key), "g"), "");
+    // Replace placeholder key (e.g. @_user_1) with @Name
+    result = result.replace(new RegExp(escapeRegExp(mention.key), "g"), `@${mention.name}`);
   }
   return result.trim();
 }
@@ -468,7 +467,7 @@ export function parseFeishuMessageEvent(
 ): FeishuMessageContext {
   const rawContent = parseMessageContent(event.message.content, event.message.message_type);
   const mentionedBot = checkBotMentioned(event, botOpenId);
-  const content = stripBotMention(rawContent, event.message.mentions);
+  const content = resolveMentionPlaceholders(rawContent, event.message.mentions);
 
   const ctx: FeishuMessageContext = {
     chatId: event.message.chat_id,
@@ -488,9 +487,8 @@ export function parseFeishuMessageEvent(
     const mentionTargets = extractMentionTargets(event, botOpenId);
     if (mentionTargets.length > 0) {
       ctx.mentionTargets = mentionTargets;
-      // Extract message body (remove all @ placeholders)
-      const allMentionKeys = (event.message.mentions ?? []).map((m) => m.key);
-      ctx.mentionMessageBody = extractMessageBody(content, allMentionKeys);
+      // Content already has resolved @Names; store body as-is for forward context
+      ctx.mentionMessageBody = content;
     }
   }
 
