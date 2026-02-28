@@ -5,7 +5,7 @@ QUERY="${1:?Query required}"
 MAX_RESULTS="${2:-5}"
 SEARCH_DEPTH="${3:-basic}"
 
-curl -s -X POST http://mcp-team-collaboration-prod.oxsci.internal:8060/jsonrpc \
+RESP=$(curl -s -X POST http://mcp-team-collaboration-prod.oxsci.internal:8060/jsonrpc \
   -H "Content-Type: application/json" \
   -d "{
     \"jsonrpc\": \"2.0\",
@@ -19,4 +19,10 @@ curl -s -X POST http://mcp-team-collaboration-prod.oxsci.internal:8060/jsonrpc \
       }
     },
     \"id\": 1
-  }" | jq -r '.result.content[] | select(.type=="text") | .text'
+  }")
+
+if command -v jq >/dev/null 2>&1; then
+    echo "$RESP" | jq -r '.result.content[] | select(.type=="text") | .text'
+else
+    echo "$RESP"
+fi
