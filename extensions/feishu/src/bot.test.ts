@@ -62,7 +62,7 @@ async function dispatchMessage(params: { cfg: ClawdbotConfig; event: FeishuMessa
 }
 
 describe("buildFeishuAgentBody", () => {
-  it("builds speaker, quoted content, mentions, and permission notice in order", () => {
+  it("builds speaker, quoted content, and permission notice in order", () => {
     const body = buildFeishuAgentBody({
       ctx: {
         content: "hello world",
@@ -79,7 +79,7 @@ describe("buildFeishuAgentBody", () => {
     });
 
     expect(body).toBe(
-      'Sender Name: [Replying to: "previous message"]\n\nhello world\n\n[System: Reply auto-mentions the @\'d users above.]\n\n[System: The bot encountered a Feishu API permission error. Please inform the user about this issue and provide the permission grant URL for the admin to authorize. Permission grant URL: https://open.feishu.cn/app/cli_test]',
+      'Sender Name: [Replying to: "previous message"]\n\nhello world\n\n[System: The bot encountered a Feishu API permission error. Please inform the user about this issue and provide the permission grant URL for the admin to authorize. Permission grant URL: https://open.feishu.cn/app/cli_test]',
     );
   });
 });

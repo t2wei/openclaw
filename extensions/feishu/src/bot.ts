@@ -510,10 +510,6 @@ export function buildFeishuAgentBody(params: {
   const speaker = ctx.senderName ?? ctx.senderOpenId;
   messageBody = `${speaker}: ${messageBody}`;
 
-  if (ctx.mentionTargets && ctx.mentionTargets.length > 0) {
-    messageBody += `\n\n[System: Reply auto-mentions the @'d users above.]`;
-  }
-
   if (permissionErrorForAgent) {
     const grantUrl = permissionErrorForAgent.grantUrl ?? "";
     messageBody += `\n\n[System: The bot encountered a Feishu API permission error. Please inform the user about this issue and provide the permission grant URL for the admin to authorize. Permission grant URL: ${grantUrl}]`;
@@ -809,12 +805,11 @@ export async function handleFeishuMessage(params: {
       }
     }
 
-    const preview = ctx.content.replace(/\s+/g, " ").slice(0, 160);
     const inboundLabel = isGroup
       ? `Feishu[${account.accountId}] message in group ${ctx.chatId}`
       : `Feishu[${account.accountId}] DM from ${ctx.senderOpenId}`;
 
-    core.system.enqueueSystemEvent(`${inboundLabel}: ${preview}`, {
+    core.system.enqueueSystemEvent(inboundLabel, {
       sessionKey: route.sessionKey,
       contextKey: `feishu:message:${ctx.chatId}:${ctx.messageId}`,
     });
