@@ -79,6 +79,8 @@ RUN pnpm build
 ENV OPENCLAW_PREFER_PNPM=1
 RUN pnpm ui:build
 
+ARG OPENCLAW_VERSION="dev"
+ENV OPENCLAW_VERSION=${OPENCLAW_VERSION}
 ENV NODE_ENV=production
 
 # node user = uid 1000, 与 EFS 文件权限一致 (ubuntu:ubuntu = 1000:1000)
