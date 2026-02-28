@@ -84,6 +84,7 @@ Subagent 可见的文件白名单：AGENTS.md, TOOLS.md, SOUL.md, IDENTITY.md, U
 - 支持 delivery 模式：none / announce（推送到聊天）/ webhook（HTTP POST）
 - 支持 timezone、stagger（随机偏移）、model override、timeout 等
 - **OxSci 用 cron 做每日记忆维护**：05:00 CST，读 `CRON_MEMORY_MAINTAIN.md` 执行
+- **OxSci 用 cron 做每日 session 回顾**：04:30 CST，读 `CRON_SESSION_REVIEW.md` 执行（前置于记忆维护，补充 daily log + 生成工作报告）
 
 **OxSci 使用原则：**
 - **优先用 cron** 做定时任务（精确、isolated、不浪费 token）
@@ -118,6 +119,7 @@ oxsci_agent_template/
 │   ├── MEMORY.md        ← 运营上下文（启动指令 + 行为规范）
 │   ├── HEARTBEAT.md     ← 临时运维任务入口（平时为空）
 │   ├── CRON_MEMORY_MAINTAIN.md ← 每日记忆维护任务（cron 读取）
+│   ├── CRON_SESSION_REVIEW.md ← 每日 session 回顾 + 工作报告（cron 读取，前置于记忆维护）
 │   ├── JOB.md           ← 岗位说明（按需读取）
 │   ├── TOOLS.md         ← 环境笔记
 │   ├── IDENTITY.md      ← 空
@@ -131,7 +133,8 @@ oxsci_agent_template/
 │       ├── REPOS.md     ← 代码仓库 index
 │       ├── repos/       ← 仓库技术笔记（Detail）
 │       │   └── {repo_name}.md
-│       └── AWS.md       ← 基础设施 + 服务端点
+│       ├── AWS.md       ← 基础设施 + 服务端点
+│       └── KNOWLEDGE-INGESTION.md ← 外部信息处理 SOP（消费/只读版）
 └── skills/              → EFS /opt/openclaw/skills/（共享）
     ├── oxsci-archive/   ← 工作文档归档到 KB
     ├── oxsci-knowledge/ ← 查询/推送公司知识库
@@ -186,6 +189,7 @@ oxsci_agent_template/
 | **"我"** | `SELF.md`：Identity + 行为规则(<20) + 偏好 | Daily log 中的反思 | 不外化（性格私有） |
 | **Repos** | `REPOS.md`：repo name, purpose, org | `memory/repos/{repo_name}.md`：技术栈、分支、部署、开发笔记 | KB：架构文档、API specs |
 | **AWS** | `AWS.md`：Account、跨服务基础设施（VPC、EFS、deployment pipeline）、端点索引 | 无独立 Detail——单服务部署细节跟 `repos/{repo_name}.md` 走 | KB：IAM 策略、CloudFormation 分析、troubleshooting |
+| **Knowledge Ingestion** | `KNOWLEDGE-INGESTION.md`：信息源类型表格（消费/只读版） | 同文件下半部分：每种源的完整 SOP | KB：如果 SOP 成熟到跨 agent 复用，再晋升 |
 
 **Colleagues 特殊规则：**
 - Detail 中的 Observations 是 AI 私有认知，不进 KB，不跨 session 引用
@@ -212,6 +216,13 @@ oxsci_agent_template/
 - 溢出到 KB：IAM 策略详解、CloudFormation 模板分析、网络拓扑、troubleshooting
 - AWS.md 某个 section 超过 ~30 行时，考虑提炼到 KB 并留指引
 
+**Knowledge Ingestion 特殊规则：**
+
+- Brief + Detail 合一（信息源类型少，拆分无收益，类似 SELF.md）
+- 消费/只读版——Tony 手动更新，AI 只读取执行
+- 不含注册机制（不会动态新增信息源类型）
+- 当用户提交飞书链接、会议纪要、Claude session 等外部信息时按需读取
+
 #### Workspace 文件结构
 
 ```
@@ -226,6 +237,7 @@ memory/
 │   ├── openclaw.md
 │   └── ...
 ├── AWS.md               ← Index only（跨服务基础设施）
+├── KNOWLEDGE-INGESTION.md ← Brief+Detail 合一（外部信息处理 SOP，只读）
 └── YYYY-MM-DD.md        ← Daily log（独立机制）
 ```
 
@@ -255,7 +267,16 @@ memory/
 - **局限：** AI 没有明确的 "session 结束" 信号——只能靠对话自然收尾
 - **现实：** 这一步可能被跳过（用户突然离开），daily cron 是兜底
 
-#### 3. Daily Maintenance Cron（核心保障）
+#### 3. Daily Session Review Cron（前置扫描）
+
+- **触发：** 每日 04:30 CST，独立 cron job（isolated session，前置于记忆维护）
+- **机制：** `CRON_SESSION_REVIEW.md` 定义任务
+- **动作：** 扫描过去 24h 所有 session → 轻量评分 → 深度读取高价值 session → 补充 daily log（标记 `[session-review]`）→ 生成 oxsciClaw 每日工作报告 → 发飞书
+- **与记忆维护的关系：** 两个 cron 通过 daily log 文件解耦——session review 先补充 daily log，记忆维护再读取并提炼
+- **Token 隔离：** 独立 cron = 独立 token 预算，session review 消耗不影响记忆维护
+- **前提：** 需要 config `agents.defaults.sandbox.sessionToolsVisibility: "all"` 才能让 cron 访问用户 session
+
+#### 4. Daily Maintenance Cron（核心保障）
 
 - **触发：** 每日 05:00 CST，cron job（isolated session）
 - **机制：** 通过 Control UI 或 `cron` tool 创建，`CRON_MEMORY_MAINTAIN.md` 定义具体任务
@@ -278,6 +299,15 @@ memory/
 - **不要在 MEMORY.md 放定时触发逻辑：** MEMORY.md 每次 session 都加载，定时任务应该用 cron（执行一次，不浪费 token）
 - **兜底机制：** session 结束提炼可能被跳过 → daily cron 兜底 → 最坏情况 daily log 原始数据不丢
 
+## 版本标准
+
+- **格式：** `YYYY.M.D-shortsha`（例如 `2026.2.28-9f167ac`）
+- **来源：** 构建时的 UTC 日期 + git commit short hash（7 位）
+- **环境变量：** `OPENCLAW_VERSION`（最高优先级，见 `src/version.ts` 的 `resolveRuntimeServiceVersion`）
+- **Dev（EC2）：** 部署时通过 `systemctl --user set-environment` 设定
+- **Prod（Docker）：** 构建时通过 `--build-arg OPENCLAW_VERSION` 注入，bake 为 `ENV`
+- **显示位置：** Control UI 顶栏"版本"字段（通过 WebSocket hello 消息传递）
+
 ## 标准流程
 
 ### 同步 upstream
@@ -298,6 +328,9 @@ export PATH="/opt/app_data/nodejs/.nvm/versions/node/v22.19.0/bin:$PATH"
 cd /opt/app_data/openclaw-dev
 git checkout oxsci && git pull origin oxsci
 pnpm install --no-frozen-lockfile && pnpm build && pnpm ui:build
+# 设置版本号（YYYY.M.D-shortsha）
+OPENCLAW_VERSION="$(date +%Y.%-m.%-d)-$(git rev-parse --short HEAD)"
+systemctl --user set-environment OPENCLAW_VERSION="$OPENCLAW_VERSION"
 systemctl --user restart openclaw-gateway.service
 journalctl --user -u openclaw-gateway.service -f  # 确认启动正常
 ```
