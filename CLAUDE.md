@@ -62,18 +62,34 @@ Subagent 可见的文件白名单：AGENTS.md, TOOLS.md, SOUL.md, IDENTITY.md, U
 - `skills.load.extraDirs` 配置：指向共享 skill 目录（`/opt/openclaw/skills/`）
 - TOOLS.md **不需要**列出 skills（框架已自动注入）
 
-### Heartbeat
+### Heartbeat & Cron（定时机制）
 
-- 默认 30 分钟定时，框架自动发送 "Read HEARTBEAT.md" prompt
-- Agent 响应 `HEARTBEAT_OK`（文本匹配，非 API 信号）表示无事
+框架提供两套定时机制，**都可以被人和 agent 使用**，但设计侧重不同：
+
+| 维度 | Heartbeat | Cron |
+|------|-----------|------|
+| **设计侧重** | Agent 侧（无管理 UI，框架自动驱动） | 人侧（完整 Web 管理界面：创建/编辑/删除/运行/历史） |
+| **灵活度** | 固定间隔（默认 30 min），读 HEARTBEAT.md | 三种调度：at（一次性）/ every（间隔）/ cron-expression |
+| **执行环境** | 主 session 内（注入 system event） | 主 session 或 isolated session |
+| **Token 成本** | 每次心跳都加载（空文件可跳过） | 按计划执行一次，不污染主 session |
+| **管理方式** | 人：编辑 HEARTBEAT.md；Agent：读取响应 | 人：Control UI；Agent：`cron` tool（ownerOnly） |
+
+**Heartbeat 细节：**
+- 框架自动发送 "Read HEARTBEAT.md" prompt，agent 响应 `HEARTBEAT_OK` 表示无事
 - 空 HEARTBEAT.md = 跳过（省 token）
 - OxSci 保持 HEARTBEAT.md 为空（默认），仅在需要临时运维任务时写入内容
 
-### Cron
+**Cron 细节：**
+- 存储：`~/.openclaw/cron/jobs.json`（JSON5，gateway 管理）
+- 支持 delivery 模式：none / announce（推送到聊天）/ webhook（HTTP POST）
+- 支持 timezone、stagger（随机偏移）、model override、timeout 等
+- **OxSci 用 cron 做每日记忆维护**：05:00 CST，读 `CRON_MEMORY_MAINTAIN.md` 执行
 
-- Agent 自行管理（add/update/remove），支持 at/every/cron-expression
-- 与 heartbeat 区别：cron 精确定时 + 独立上下文（isolated session），heartbeat 是粗粒度周期 + 主 session 内
-- **OxSci 用 cron 做每日记忆维护**：05:00 CST，读 `MEMORY_MAINTAIN.md` 执行（daily log 提炼、detail 更新、docs/ 清理、KB 晋升）
+**OxSci 使用原则：**
+- **优先用 cron** 做定时任务（精确、isolated、不浪费 token）
+- **HEARTBEAT.md 仅做临时运维入口**（写入一次性任务，处理完清空）
+- 避免在 MEMORY.md 中放定时触发逻辑（每次 session 都加载，浪费 token）
+- Cron job 应通过 **Control UI 或 `cron` tool 创建**，不要直接编辑 jobs.json（绕过 gateway validation，需重启才生效）
 
 ### Session 隔离
 
@@ -101,7 +117,7 @@ oxsci_agent_template/
 │   ├── SOUL.md          ← 独立 AI 个体人设
 │   ├── MEMORY.md        ← 运营上下文（启动指令 + 行为规范）
 │   ├── HEARTBEAT.md     ← 临时运维任务入口（平时为空）
-│   ├── MEMORY_MAINTAIN.md ← 每日记忆维护任务（cron 读取）
+│   ├── CRON_MEMORY_MAINTAIN.md ← 每日记忆维护任务（cron 读取）
 │   ├── JOB.md           ← 岗位说明（按需读取）
 │   ├── TOOLS.md         ← 环境笔记
 │   ├── IDENTITY.md      ← 空
@@ -159,7 +175,7 @@ oxsci_agent_template/
 | 阶段 | 触发 | 动作 |
 |------|------|------|
 | **注册** | 新实体发现（新同事/新 repo/新服务） | 即时：查询信息 → 写 Brief + 创建 Detail + 记 daily log |
-| **更新** | Heartbeat / session 结束 | 异步：扫 daily log → 提炼到 Detail；溢出技术知识 → KB |
+| **更新** | Session 结束 / daily cron | 异步：扫 daily log → 提炼到 Detail；溢出技术知识 → KB |
 | **消费** | Session 中需要信息 | Brief 先行（已在上下文）→ 需要深入时读 Detail → 需要技术细节时查 KB |
 
 #### 按领域展开
@@ -242,10 +258,10 @@ memory/
 #### 3. Daily Maintenance Cron（核心保障）
 
 - **触发：** 每日 05:00 CST，cron job（isolated session）
-- **机制：** 框架内建 cron + `MEMORY_MAINTAIN.md` 定义具体任务
+- **机制：** 通过 Control UI 或 `cron` tool 创建，`CRON_MEMORY_MAINTAIN.md` 定义具体任务
 - **动作：** 扫 daily log → 提炼到 detail（只处理尚未反映的新内容）；SELF.md overflow 检查；detail → KB 晋升；docs/ 清理；commit & push
 - **增量策略：** cron 在 isolated session 执行，每次读 daily log + 对应 detail 文件，由 LLM 对比判断哪些是新内容。重复提炼无害（idempotent）
-- **Bootstrap：** MEMORY.md 要求 agent 启动时检查 cron 是否存在，不存在则自动创建
+- **Bootstrap：** 首次部署时通过 Control UI 创建 cron job（人管理，不依赖 agent 自举）
 
 #### Heartbeat（框架默认，OxSci 保持空）
 
@@ -257,8 +273,9 @@ memory/
 
 - **提示词驱动即时更新：** Session 内的 index 注册和 daily log 写入靠提示词，因为框架不提供 session lifecycle 事件
 - **各 Brief 文件自包含流程：** 注册、更新的具体动作写在对应 Brief 文件头部（COLLEAGUES.md、REPOS.md、AWS.md），MEMORY.md 只定义通用原则
-- **Cron 是记忆维护的核心保障：** 每日定时、isolated session、不污染主 session token、精确执行一次
-- **HEARTBEAT.md 是临时运维入口：** 只在需要时写入，平时为空
+- **Cron 是定时任务首选：** 精确定时、isolated session、不污染主 session token、按需执行，通过 Control UI 管理（人侧重）或 `cron` tool（agent 侧重）
+- **HEARTBEAT.md 仅做临时运维入口：** 只在需要时写入，平时为空。不要把定时逻辑放 HEARTBEAT.md（每次心跳都加载，浪费 token）
+- **不要在 MEMORY.md 放定时触发逻辑：** MEMORY.md 每次 session 都加载，定时任务应该用 cron（执行一次，不浪费 token）
 - **兜底机制：** session 结束提炼可能被跳过 → daily cron 兜底 → 最坏情况 daily log 原始数据不丢
 
 ## 标准流程

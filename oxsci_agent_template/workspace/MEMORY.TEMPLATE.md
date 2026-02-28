@@ -29,15 +29,6 @@ Do this without being asked. It's not optional.
 Index and detail files are **projections** of daily log content:
 
 - **Immediate:** facts (new colleague, new repo, new endpoint) — write to index as discovered
-- **Async:** judgments (behavioral rules, colleague impressions, technical notes) — extracted by the daily maintenance cron job (see `MEMORY_MAINTAIN.md`)
-
-## Daily Maintenance Cron
-
-A cron job runs daily at 05:00 CST to consolidate memory. It reads `MEMORY_MAINTAIN.md` and processes daily logs → detail files → KB.
-
-On startup, verify this cron exists. If not, create it:
-- **Schedule:** `cron 0 5 * * *` (05:00 Asia/Shanghai daily)
-- **Prompt:** `Read MEMORY_MAINTAIN.md and execute all tasks.`
 
 ## Working Files
 
