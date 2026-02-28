@@ -43,7 +43,7 @@
 
 | 文件 | 加载方式 | 作用 |
 |------|----------|------|
-| `AGENTS.md` | 每次 session 自动注入 system prompt | 红线规则、启动指令 |
+| `AGENTS.md` | 每次 session 自动注入 system prompt | 红线规则（不含启动指令——启动由 MEMORY.md 驱动） |
 | `SOUL.md` | 自动注入 system prompt | 人设与个性（可长可短，截断上限 20K chars） |
 | `MEMORY.md` | 主 session 自动加载，subagent/cron 不可见 | 运营上下文 |
 | `IDENTITY.md` / `USER.md` | 自动加载（subagent 也可见） | 框架保留位 |
@@ -97,7 +97,7 @@ Subagent 可见的文件白名单：AGENTS.md, TOOLS.md, SOUL.md, IDENTITY.md, U
 ```
 oxsci_agent_template/
 ├── workspace/           → EFS /opt/openclaw/workspace[-xxx]/
-│   ├── AGENTS.md        ← 红线 + 多用户协作 + 启动流程
+│   ├── AGENTS.md        ← 红线规则 only（启动流程在 MEMORY.md，避免 subagent 看到启动指令）
 │   ├── SOUL.md          ← 独立 AI 个体人设
 │   ├── MEMORY.md        ← 运营上下文（启动指令 + 行为规范）
 │   ├── HEARTBEAT.md     ← 临时运维任务入口（平时为空）
@@ -218,6 +218,7 @@ memory/
 - **根目录：** 基础、很少变（AGENTS, SOUL, TOOLS — subagent 可见；MEMORY — 仅主 session）
 - **memory/：** 自维护、持续演化、不自动加载
 - **第三人称指令（你写的）** vs **第一人称（AI 自己写的）**
+- **AGENTS.md 只放红线规则，不放启动指令。** 原因：AGENTS.md 在 subagent allowlist 里（AGENTS, TOOLS, SOUL, IDENTITY, USER），如果写了 "Read MEMORY.md"，subagent 会看到并尝试执行。启动流程由 MEMORY.md 的 `On Startup` section 驱动，MEMORY.md 只注入主 session，天然隔离。
 
 ### 记忆更新触发机制
 
