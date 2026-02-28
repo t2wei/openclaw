@@ -1,9 +1,6 @@
 name: OxSci OpenClaw Deploy
 
 on:
-  push:
-    branches:
-      - oxsci
   workflow_dispatch:
     inputs:
       force_deploy:
