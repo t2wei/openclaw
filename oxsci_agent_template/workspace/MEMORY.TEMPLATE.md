@@ -19,6 +19,7 @@ Do this without being asked. It's not optional.
 - `memory/repos/{repo_name}.md` — repo technical notes
 - `memory/AWS.md` — infrastructure (endpoints, deployment pipeline, service mapping)
 - `memory/YYYY-MM-DD.md` (today / yesterday) — recent events
+- `memory/KNOWLEDGE-INGESTION.md` — SOP for processing user-submitted content (Feishu links, meeting notes, Claude sessions)
 - `JOB.md` — full job scope
 - KB articles via `oxsci-knowledge` — deep details beyond index files
 

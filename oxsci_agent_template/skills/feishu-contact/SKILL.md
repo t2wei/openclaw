@@ -39,13 +39,44 @@ Feishu 通讯录查询工具。用于识别新同事。
 - `open_id` — 飞书 open_id
 - `union_id` — 跨应用 union_id
 
+### search_user.sh
+
+通过名字搜索用户（模糊匹配）。
+
+**用法**：
+
+```bash
+./scripts/search_user.sh <name> [department_id]
+```
+
+**参数**：
+
+- `name`: 要搜索的名字（支持部分匹配，不区分大小写）
+- `department_id`: 部门 ID，默认 `0`（根部门，即全公司）
+
+**示例**：
+
+```bash
+./scripts/search_user.sh 文浩
+./scripts/search_user.sh "Tony"
+./scripts/search_user.sh 张 od-xxx  # 在特定部门搜索
+```
+
+**返回**：匹配用户的 JSON 数组，包含 name、open_id、email、job_title 等字段。
+
 ## 使用场景
 
-当收到未知 channel ID（`ou_xxx`）的消息时：
+**场景 1**：收到未知 channel ID（`ou_xxx`）的消息
 
-1. 用此脚本查询用户信息
+1. 用 `get_user.sh` 查询用户信息
 2. 将结果添加到 `memory/COLLEAGUES.md`
 3. 在当前 session 中正常响应
+
+**场景 2**：需要查找某人但只有名字
+
+1. 用 `search_user.sh` 按名字搜索
+2. 从结果中获取 open_id 和其他信息
+3. 继续后续操作
 
 ## 注意
 
