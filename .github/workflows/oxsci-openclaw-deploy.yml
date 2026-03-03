@@ -12,6 +12,7 @@ env:
   AWS_REGION: ap-southeast-1
   ECR_REGISTRY: 000373574646.dkr.ecr.ap-southeast-1.amazonaws.com
   ECR_REPOSITORY: oxsci/openclaw
+  ECR_BASE_REPOSITORY: oxsci/openclaw-base
   ECS_CLUSTER: oxsci-prod
   ECS_SERVICE: openclaw-prod
   TASK_DEFINITION_FAMILY: openclaw-prod
@@ -60,6 +61,7 @@ jobs:
           file: Dockerfile.oxsci
           push: true
           build-args: |
+            BASE_IMAGE=${{ env.ECR_REGISTRY }}/${{ env.ECR_BASE_REPOSITORY }}:latest
             OPENCLAW_VERSION=${{ steps.version.outputs.tag }}
           tags: |
             ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ steps.version.outputs.tag }}
@@ -70,7 +72,7 @@ jobs:
       - name: Register new ECS task definition
         id: task-def
         run: |
-          # Get current task definition and update image + user
+          # Get current task definition and update image + secrets
           TASK_DEF=$(aws ecs describe-task-definition \
             --task-definition ${{ env.TASK_DEFINITION_FAMILY }} \
             --query 'taskDefinition' \
@@ -79,10 +81,33 @@ jobs:
           NEW_TASK_DEF=$(echo "$TASK_DEF" | python3 -c "
           import json, sys
           td = json.load(sys.stdin)
+          container = td['containerDefinitions'][0]
+
           # Update image
-          td['containerDefinitions'][0]['image'] = '${{ steps.version.outputs.image }}'
+          container['image'] = '${{ steps.version.outputs.image }}'
+
           # Run as node user (uid 1000), consistent with EFS file ownership
-          td['containerDefinitions'][0]['user'] = 'node'
+          container['user'] = 'node'
+
+          # Ensure ECS native secrets from SSM Parameter Store
+          # ECS agent fetches values at task start; update SSM + restart task to refresh
+          desired_secrets = {
+              'ANTHROPIC_API_KEY': '/prod/llm/ANTHROPIC_AUTH_TOKEN',
+              'ANTHROPIC_BASE_URL': '/prod/llm/ANTHROPIC_BASE_URL',
+          }
+
+          existing = {s['name']: s for s in (container.get('secrets') or [])}
+          for name, ssm_path in desired_secrets.items():
+              existing[name] = {'name': name, 'valueFrom': ssm_path}
+          container['secrets'] = list(existing.values())
+
+          # Ensure required env vars (idempotent)
+          env_map = {e['name']: e for e in container.get('environment', [])}
+          env_map.setdefault('CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC', {
+              'name': 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC', 'value': '1'
+          })
+          container['environment'] = list(env_map.values())
+
           # Remove fields not accepted by register-task-definition
           for key in ['taskDefinitionArn','revision','status','requiresAttributes',
                       'compatibilities','registeredAt','registeredBy','enableFaultInjection']:
