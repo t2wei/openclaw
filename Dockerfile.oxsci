@@ -20,8 +20,9 @@ COPY --chown=node:node package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY --chown=node:node ui/package.json ./ui/package.json
 COPY --chown=node:node patches ./patches
 COPY --chown=node:node scripts ./scripts
-# Copy all workspace package manifests so pnpm installs extension/package dependencies correctly
-COPY --chown=node:node --parents extensions/*/package.json packages/*/package.json ./
+# Copy extensions/packages dirs so pnpm install resolves all workspace dependencies
+COPY --chown=node:node extensions ./extensions
+COPY --chown=node:node packages ./packages
 
 USER node
 RUN NODE_OPTIONS=--max-old-space-size=2048 pnpm install --frozen-lockfile
