@@ -94,6 +94,7 @@ jobs:
           desired_secrets = {
               'ANTHROPIC_API_KEY': '/prod/llm/ANTHROPIC_AUTH_TOKEN',
               'ANTHROPIC_BASE_URL': '/prod/llm/ANTHROPIC_BASE_URL',
+              'OXSCI_CODEX_API_KEY': '/prod/llm/OXSCI_CODEX_API_KEY',
           }
 
           existing = {s['name']: s for s in (container.get('secrets') or [])}
