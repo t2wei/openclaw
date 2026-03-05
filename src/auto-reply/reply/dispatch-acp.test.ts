@@ -372,4 +372,41 @@ describe("tryDispatchAcpReply", () => {
       }),
     );
   });
+
+  it("forces dispatcher path when replyRouting is 'dispatcher'", async () => {
+    setReadyAcpResolution();
+    mockVisibleTextTurn();
+
+    const { dispatcher } = createDispatcher();
+    await runDispatch({
+      bodyForAgent: "reply",
+      cfg: createAcpTestConfig({
+        acp: { enabled: true, stream: { replyRouting: "dispatcher" } },
+      }),
+      dispatcher,
+      shouldRouteToOriginating: true,
+    });
+
+    expect(routeMocks.routeReply).not.toHaveBeenCalled();
+    expect(dispatcher.sendBlockReply).toHaveBeenCalled();
+  });
+
+  it("suppresses output when replyRouting is 'silent'", async () => {
+    setReadyAcpResolution();
+    mockVisibleTextTurn();
+
+    const { dispatcher } = createDispatcher();
+    await runDispatch({
+      bodyForAgent: "reply",
+      cfg: createAcpTestConfig({
+        acp: { enabled: true, stream: { replyRouting: "silent" } },
+      }),
+      dispatcher,
+      shouldRouteToOriginating: true,
+    });
+
+    expect(routeMocks.routeReply).not.toHaveBeenCalled();
+    expect(dispatcher.sendBlockReply).not.toHaveBeenCalled();
+    expect(dispatcher.sendFinalReply).not.toHaveBeenCalled();
+  });
 });
