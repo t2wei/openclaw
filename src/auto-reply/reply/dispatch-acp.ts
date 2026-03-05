@@ -154,6 +154,15 @@ export async function tryInjectAcpCallback(params: {
     logVerbose(`acp-callback: no spawnedBy for ${params.acpSessionKey}, skipping callback`);
     return;
   }
+  // Read parent session to recover thread routing context (e.g. Feishu topic
+  // root_id).  Without this, inter_session callbacks lose the originating
+  // thread and land in the group root instead of the topic.
+  const parentEntry = readAcpSessionEntry({
+    cfg: params.cfg,
+    sessionKey: parentSessionKey,
+  });
+  const parentThreadId =
+    parentEntry?.entry?.lastThreadId != null ? String(parentEntry.entry.lastThreadId) : undefined;
   const acpAgent = resolveAgentIdFromSessionKey(params.acpSessionKey);
   try {
     await callGateway({
@@ -164,6 +173,7 @@ export async function tryInjectAcpCallback(params: {
         idempotencyKey: generateSecureUuid(),
         deliver: true,
         channel: "last",
+        threadId: parentThreadId,
         lane: AGENT_LANE_NESTED,
         extraSystemPrompt: [
           "ACP callback: the following message is the output from an ACP agent turn.",
