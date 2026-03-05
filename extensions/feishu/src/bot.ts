@@ -225,6 +225,8 @@ type ResolvedFeishuGroupSession = {
   groupSessionScope: GroupSessionScope;
   replyInThread: boolean;
   threadReply: boolean;
+  /** Topic root message ID used for thread routing (rootId ?? threadId ?? messageId). */
+  topicScope: string | null;
 };
 
 function resolveFeishuGroupSession(params: {
@@ -302,6 +304,7 @@ function resolveFeishuGroupSession(params: {
     groupSessionScope,
     replyInThread,
     threadReply,
+    topicScope,
   };
 }
 
@@ -1310,7 +1313,7 @@ export async function handleFeishuMessage(params: {
         InboundHistory: inboundHistory,
         ReplyToId: ctx.parentId,
         RootMessageId: ctx.rootId,
-        MessageThreadId: ctx.rootId,
+        MessageThreadId: groupSession?.topicScope ?? ctx.rootId,
         RawBody: ctx.content,
         CommandBody: ctx.content,
         From: feishuFrom,
