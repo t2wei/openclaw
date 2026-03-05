@@ -747,7 +747,7 @@ export class AcpSessionManager {
             failOnStatusError: false,
           }));
         }
-        if (meta.mode === "oneshot") {
+        if (meta.mode === "oneshot" && !input.cfg.acp?.stream?.callbackToParent) {
           try {
             await runtime.close({
               handle,
