@@ -425,6 +425,7 @@ export async function spawnAcpDirect(
         idempotencyKey: childIdem,
         deliver: hasDeliveryTarget,
         label: params.label || undefined,
+        spawnedBy: ctx.agentSessionKey,
       },
       timeoutMs: 10_000,
     });

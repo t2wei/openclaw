@@ -25,6 +25,15 @@ export type AcpStreamConfig = {
    *  - dispatcher: via session dispatcher (preserves topic routing and WebChat visibility)
    *  - silent: suppresses all external delivery while preserving session context */
   replyRouting?: "route" | "dispatcher" | "silent";
+  /** When true, inject accumulated ACP turn output into the parent session
+   *  via callGateway after the turn completes.  The parent agent then
+   *  decides whether/how to relay the result to the user.  Requires the
+   *  child ACP session to have a recorded `spawnedBy` parent key. */
+  callbackToParent?: boolean;
+  /** How the prompt text is delivered to the acpx child process.
+   *  - stdin (default): via `--file -` and `child.stdin.end(text)`
+   *  - arg: as a positional CLI argument, keeping stdin open */
+  promptDelivery?: "arg" | "stdin";
   /**
    * Per-sessionUpdate visibility overrides.
    * Keys not listed here fall back to OpenClaw defaults.

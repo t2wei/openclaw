@@ -396,6 +396,8 @@ export const OpenClawSchema = z
             replyRouting: z
               .union([z.literal("route"), z.literal("dispatcher"), z.literal("silent")])
               .optional(),
+            callbackToParent: z.boolean().optional(),
+            promptDelivery: z.union([z.literal("arg"), z.literal("stdin")]).optional(),
             tagVisibility: z.record(z.string(), z.boolean()).optional(),
           })
           .strict()
