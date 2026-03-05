@@ -188,6 +188,8 @@ export const FIELD_HELP: Record<string, string> = {
     "Maximum assistant output characters projected per ACP turn before truncation notice is emitted.",
   "acp.stream.maxSessionUpdateChars":
     "Maximum characters for projected ACP session/update lines (tool/status updates).",
+  "acp.stream.replyRouting":
+    "ACP reply routing mode: route (default) sends via outbound adapter to originating channel, dispatcher forces replies through session dispatcher (preserves topic routing and WebChat visibility), silent suppresses all external delivery while preserving session context.",
   "acp.stream.tagVisibility":
     "Per-sessionUpdate visibility overrides for ACP projection (for example usage_update, available_commands_update).",
   "acp.runtime.ttlMinutes":

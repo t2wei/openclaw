@@ -20,6 +20,11 @@ export type AcpStreamConfig = {
   maxOutputChars?: number;
   /** Maximum visible characters for projected session/update lines. */
   maxSessionUpdateChars?: number;
+  /** Controls how ACP turn output is delivered to the originating channel.
+   *  - route (default): via outbound adapter to originating channel
+   *  - dispatcher: via session dispatcher (preserves topic routing and WebChat visibility)
+   *  - silent: suppresses all external delivery while preserving session context */
+  replyRouting?: "route" | "dispatcher" | "silent";
   /**
    * Per-sessionUpdate visibility overrides.
    * Keys not listed here fall back to OpenClaw defaults.

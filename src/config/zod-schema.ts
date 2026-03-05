@@ -393,6 +393,9 @@ export const OpenClawSchema = z
               .optional(),
             maxOutputChars: z.number().int().positive().optional(),
             maxSessionUpdateChars: z.number().int().positive().optional(),
+            replyRouting: z
+              .union([z.literal("route"), z.literal("dispatcher"), z.literal("silent")])
+              .optional(),
             tagVisibility: z.record(z.string(), z.boolean()).optional(),
           })
           .strict()

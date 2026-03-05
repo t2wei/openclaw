@@ -66,6 +66,8 @@ export function createAcpDispatchDeliveryCoordinator(params: {
     toolMessageByCallId: new Map(),
   };
 
+  const replyRouting = params.cfg.acp?.stream?.replyRouting ?? "route";
+
   const startReplyLifecycleOnce = async () => {
     if (state.startedReplyLifecycle) {
       return;
@@ -127,6 +129,12 @@ export function createAcpDispatchDeliveryCoordinator(params: {
       state.blockCount += 1;
     }
 
+    // Silent mode: skip all external delivery but report success.
+    if (replyRouting === "silent") {
+      state.routedCounts[kind] += 1;
+      return true;
+    }
+
     if ((payload.text?.trim() ?? "").length > 0 || payload.mediaUrl || payload.mediaUrls?.length) {
       await startReplyLifecycleOnce();
     }
@@ -140,7 +148,15 @@ export function createAcpDispatchDeliveryCoordinator(params: {
       ttsAuto: params.sessionTtsAuto,
     });
 
-    if (params.shouldRouteToOriginating && params.originatingChannel && params.originatingTo) {
+    // Config can override the computed shouldRouteToOriginating:
+    // "dispatcher" forces the dispatcher path; "route" preserves current behavior.
+    const useOutboundRoute =
+      replyRouting === "route" &&
+      params.shouldRouteToOriginating &&
+      Boolean(params.originatingChannel) &&
+      Boolean(params.originatingTo);
+
+    if (useOutboundRoute) {
       const toolCallId = meta?.toolCallId?.trim();
       if (kind === "tool" && meta?.allowEdit === true && toolCallId) {
         const edited = await tryEditToolMessage(ttsPayload, toolCallId);
@@ -151,8 +167,8 @@ export function createAcpDispatchDeliveryCoordinator(params: {
 
       const result = await routeReply({
         payload: ttsPayload,
-        channel: params.originatingChannel,
-        to: params.originatingTo,
+        channel: params.originatingChannel!,
+        to: params.originatingTo!,
         sessionKey: params.ctx.SessionKey,
         accountId: params.ctx.AccountId,
         threadId: params.ctx.MessageThreadId,
@@ -166,9 +182,9 @@ export function createAcpDispatchDeliveryCoordinator(params: {
       }
       if (kind === "tool" && meta?.toolCallId && result.messageId) {
         state.toolMessageByCallId.set(meta.toolCallId, {
-          channel: params.originatingChannel,
+          channel: params.originatingChannel!,
           accountId: params.ctx.AccountId,
-          to: params.originatingTo,
+          to: params.originatingTo!,
           ...(params.ctx.MessageThreadId != null ? { threadId: params.ctx.MessageThreadId } : {}),
           messageId: result.messageId,
         });
