@@ -289,13 +289,24 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
 
           if (streaming?.isActive()) {
             if (info?.kind === "block") {
-              // Some runtimes emit block payloads without onPartial/final callbacks.
-              // Mirror block text into streamText so onIdle close still sends content.
-              queueStreamingUpdate(text);
+              // Narration: replace card content so each step overwrites the previous one.
+              // Users see the latest status, not a growing log of all narration.
+              streamText = text;
+              partialUpdateQueue = partialUpdateQueue.then(async () => {
+                if (streaming?.isActive()) {
+                  await streaming.update(streamText);
+                }
+              });
             }
             if (info?.kind === "final") {
+              // Replace card content with final text. Don't close here — there may be
+              // multiple final payloads; let onIdle close with the last one.
               streamText = text;
-              await closeStreaming();
+              partialUpdateQueue = partialUpdateQueue.then(async () => {
+                if (streaming?.isActive()) {
+                  await streaming.update(streamText);
+                }
+              });
             }
             // Send media even when streaming handled the text
             if (hasMedia) {
@@ -391,7 +402,21 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
             if (!payload.text) {
               return;
             }
-            queueStreamingUpdate(payload.text, { dedupeWithLastPartial: true });
+            // Partial replies are cumulative — replace streamText directly
+            // to avoid append duplication (#34108, #33751).
+            if (payload.text === lastPartial) {
+              return;
+            }
+            lastPartial = payload.text;
+            streamText = payload.text;
+            partialUpdateQueue = partialUpdateQueue.then(async () => {
+              if (streamingStartPromise) {
+                await streamingStartPromise;
+              }
+              if (streaming?.isActive()) {
+                await streaming.update(streamText);
+              }
+            });
           }
         : undefined,
     },
