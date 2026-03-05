@@ -18,7 +18,6 @@ import { generateSecureUuid } from "../../infra/secure-random.js";
 import { prefixSystemMessage } from "../../infra/system-message.js";
 import { resolveAgentIdFromSessionKey } from "../../routing/session-key.js";
 import { maybeApplyTtsToPayload, resolveTtsConfig } from "../../tts/tts.js";
-import { INTERNAL_MESSAGE_CHANNEL } from "../../utils/message-channel.js";
 import {
   isCommandEnabled,
   maybeResolveTextAlias,
@@ -163,8 +162,8 @@ export async function tryInjectAcpCallback(params: {
         message: params.callbackText,
         sessionKey: parentSessionKey,
         idempotencyKey: generateSecureUuid(),
-        deliver: false,
-        channel: INTERNAL_MESSAGE_CHANNEL,
+        deliver: true,
+        channel: "last",
         lane: AGENT_LANE_NESTED,
         extraSystemPrompt: [
           "ACP callback: the following message is the output from an ACP agent turn.",
