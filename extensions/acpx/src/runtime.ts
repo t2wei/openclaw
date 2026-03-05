@@ -239,10 +239,13 @@ export class AcpxRuntime implements AcpRuntime {
 
   async *runTurn(input: AcpRuntimeTurnInput): AsyncIterable<AcpRuntimeEvent> {
     const state = this.resolveHandleState(input.handle);
+    const useArgDelivery = input.promptDelivery === "arg";
     const args = this.buildPromptArgs({
       agent: state.agent,
       sessionName: state.name,
       cwd: state.cwd,
+      promptDelivery: input.promptDelivery,
+      promptText: useArgDelivery ? input.text : undefined,
     });
 
     const cancelOnAbort = async () => {
@@ -276,7 +279,11 @@ export class AcpxRuntime implements AcpRuntime {
       // Ignore EPIPE when the child exits before stdin flush completes.
     });
 
-    child.stdin.end(input.text);
+    if (useArgDelivery) {
+      // Prompt text is passed as a CLI argument; keep stdin open.
+    } else {
+      child.stdin.end(input.text);
+    }
 
     let stderr = "";
     child.stderr.on("data", (chunk) => {
@@ -557,7 +564,13 @@ export class AcpxRuntime implements AcpRuntime {
     return ["--format", "json", "--json-strict", "--cwd", params.cwd, ...params.command];
   }
 
-  private buildPromptArgs(params: { agent: string; sessionName: string; cwd: string }): string[] {
+  private buildPromptArgs(params: {
+    agent: string;
+    sessionName: string;
+    cwd: string;
+    promptDelivery?: "arg" | "stdin";
+    promptText?: string;
+  }): string[] {
     const args = [
       "--format",
       "json",
@@ -575,7 +588,13 @@ export class AcpxRuntime implements AcpRuntime {
     // OXSCI PATCH: use `exec` for claude agent to work around session
     // persistence bug (see ensureSession comment for details).
     if (params.agent === "claude") {
-      args.push(params.agent, "exec", "--file", "-");
+      if (params.promptDelivery === "arg" && params.promptText) {
+        args.push(params.agent, "exec", params.promptText);
+      } else {
+        args.push(params.agent, "exec", "--file", "-");
+      }
+    } else if (params.promptDelivery === "arg" && params.promptText) {
+      args.push(params.agent, "prompt", "--session", params.sessionName, params.promptText);
     } else {
       args.push(params.agent, "prompt", "--session", params.sessionName, "--file", "-");
     }

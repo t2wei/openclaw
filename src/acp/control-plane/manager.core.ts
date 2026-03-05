@@ -689,6 +689,7 @@ export class AcpSessionManager {
           mode: input.mode,
           requestId: input.requestId,
           signal: combinedSignal,
+          promptDelivery: input.cfg.acp?.stream?.promptDelivery,
         })) {
           if (event.type === "error") {
             streamError = new AcpRuntimeError(

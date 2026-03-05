@@ -45,6 +45,10 @@ export type AcpRuntimeTurnInput = {
   mode: AcpRuntimePromptMode;
   requestId: string;
   signal?: AbortSignal;
+  /** How the prompt text is delivered to the child process.
+   *  - stdin (default): via `--file -` and `child.stdin.end(text)`
+   *  - arg: as a positional CLI argument, keeping stdin open */
+  promptDelivery?: "arg" | "stdin";
 };
 
 export type AcpRuntimeCapabilities = {
