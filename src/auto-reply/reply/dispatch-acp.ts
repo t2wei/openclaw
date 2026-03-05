@@ -141,7 +141,7 @@ function hasBoundConversationForSession(params: {
   });
 }
 
-async function tryInjectAcpCallback(params: {
+export async function tryInjectAcpCallback(params: {
   cfg: OpenClawConfig;
   acpSessionKey: string;
   callbackText: string;

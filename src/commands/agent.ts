@@ -1,6 +1,7 @@
 import { getAcpSessionManager } from "../acp/control-plane/manager.js";
 import { resolveAcpAgentPolicyError, resolveAcpDispatchPolicyError } from "../acp/policy.js";
 import { toAcpRuntimeError } from "../acp/runtime/errors.js";
+import { tryInjectAcpCallback } from "../auto-reply/reply/dispatch-acp.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 
 const log = createSubsystemLogger("commands/agent");
@@ -571,11 +572,24 @@ async function agentCommandInternal(
         },
       };
 
+      // When replyRouting is "silent", suppress external delivery of ACP turn
+      // output while preserving session context and callback-to-parent flow.
+      const acpReplyRouting = cfg.acp?.stream?.replyRouting ?? "route";
+      const acpDeliverOpts = acpReplyRouting === "silent" ? { ...opts, deliver: false } : opts;
+
+      if (cfg.acp?.stream?.callbackToParent === true && finalText && sessionKey) {
+        await tryInjectAcpCallback({
+          cfg,
+          acpSessionKey: sessionKey,
+          callbackText: finalText,
+        });
+      }
+
       return await deliverAgentCommandResult({
         cfg,
         deps,
         runtime,
-        opts,
+        opts: acpDeliverOpts,
         outboundSession,
         sessionEntry,
         result,
