@@ -689,7 +689,6 @@ export class AcpSessionManager {
           mode: input.mode,
           requestId: input.requestId,
           signal: combinedSignal,
-          promptDelivery: input.cfg.acp?.stream?.promptDelivery,
         })) {
           if (event.type === "error") {
             streamError = new AcpRuntimeError(
@@ -747,7 +746,7 @@ export class AcpSessionManager {
             failOnStatusError: false,
           }));
         }
-        if (meta.mode === "oneshot" && !input.cfg.acp?.stream?.callbackToParent) {
+        if (meta.mode === "oneshot") {
           try {
             await runtime.close({
               handle,

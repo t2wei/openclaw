@@ -8,10 +8,8 @@ import {
   resolveSessionIdentityFromMeta,
 } from "../../acp/runtime/session-identity.js";
 import { readAcpSessionEntry } from "../../acp/runtime/session-meta.js";
-import { AGENT_LANE_NESTED } from "../../agents/lanes.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import type { TtsAutoMode } from "../../config/types.tts.js";
-import { callGateway } from "../../gateway/call.js";
 import { logVerbose } from "../../globals.js";
 import { getSessionBindingService } from "../../infra/outbound/session-binding-service.js";
 import { generateSecureUuid } from "../../infra/secure-random.js";
@@ -138,65 +136,6 @@ function hasBoundConversationForSession(params: {
       conversationId.length > 0
     );
   });
-}
-
-export async function tryInjectAcpCallback(params: {
-  cfg: OpenClawConfig;
-  acpSessionKey: string;
-  callbackText: string;
-}): Promise<void> {
-  const storeEntry = readAcpSessionEntry({
-    cfg: params.cfg,
-    sessionKey: params.acpSessionKey,
-  });
-  const parentSessionKey = storeEntry?.entry?.spawnedBy?.trim();
-  if (!parentSessionKey) {
-    logVerbose(`acp-callback: no spawnedBy for ${params.acpSessionKey}, skipping callback`);
-    return;
-  }
-  // Read parent session to recover thread routing context (e.g. Feishu topic
-  // root_id).  Without this, inter_session callbacks lose the originating
-  // thread and land in the group root instead of the topic.
-  const parentEntry = readAcpSessionEntry({
-    cfg: params.cfg,
-    sessionKey: parentSessionKey,
-  });
-  const parentThreadId =
-    parentEntry?.entry?.lastThreadId != null ? String(parentEntry.entry.lastThreadId) : undefined;
-  const acpAgent = resolveAgentIdFromSessionKey(params.acpSessionKey);
-  try {
-    await callGateway({
-      method: "agent",
-      params: {
-        message: params.callbackText,
-        sessionKey: parentSessionKey,
-        idempotencyKey: generateSecureUuid(),
-        deliver: true,
-        channel: "last",
-        threadId: parentThreadId,
-        lane: AGENT_LANE_NESTED,
-        extraSystemPrompt: [
-          "ACP callback: the following message is the output from an ACP agent turn.",
-          `ACP agent: ${acpAgent}.`,
-          `ACP session: ${params.acpSessionKey}.`,
-          "Decide whether and how to relay this result to the user.",
-        ].join("\n"),
-        inputProvenance: {
-          kind: "inter_session" as const,
-          sourceSessionKey: params.acpSessionKey,
-          sourceTool: "acp_callback",
-        },
-      },
-      timeoutMs: 15_000,
-    });
-    logVerbose(
-      `acp-callback: injected callback from ${params.acpSessionKey} into ${parentSessionKey}`,
-    );
-  } catch (err) {
-    logVerbose(
-      `acp-callback: failed to inject callback into ${parentSessionKey}: ${err instanceof Error ? err.message : String(err)}`,
-    );
-  }
 }
 
 export type AcpDispatchAttemptResult = {
@@ -361,17 +300,6 @@ export async function tryDispatchAcpReply(params: {
           });
           queuedFinal = queuedFinal || delivered;
         }
-      }
-    }
-
-    if (params.cfg.acp?.stream?.callbackToParent === true) {
-      const callbackText = delivery.getAccumulatedBlockText().trim();
-      if (callbackText) {
-        await tryInjectAcpCallback({
-          cfg: params.cfg,
-          acpSessionKey: sessionKey,
-          callbackText,
-        });
       }
     }
 

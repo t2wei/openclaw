@@ -179,25 +179,6 @@ export class AcpxRuntime implements AcpRuntime {
     const cwd = asTrimmedString(input.cwd) || this.config.cwd;
     const mode = input.mode;
 
-    // OXSCI PATCH: claude-agent-acp does not persist sessions to disk after
-    // `sessions ensure`, so the subsequent `prompt --session` always fails with
-    // "No conversation found". Skip the ensure step for the claude agent and
-    // fall through to use `exec` (one-shot) mode in buildPromptArgs instead.
-    // Upstream: openclaw#28708, claude-agent-acp#362, acpx#29
-    if (agent === "claude") {
-      return {
-        sessionKey: input.sessionKey,
-        backend: ACPX_BACKEND_ID,
-        runtimeSessionName: encodeAcpxRuntimeHandleState({
-          name: sessionName,
-          agent,
-          cwd,
-          mode,
-        }),
-        cwd,
-      };
-    }
-
     const events = await this.runControlCommand({
       args: this.buildControlArgs({
         cwd,
@@ -239,13 +220,10 @@ export class AcpxRuntime implements AcpRuntime {
 
   async *runTurn(input: AcpRuntimeTurnInput): AsyncIterable<AcpRuntimeEvent> {
     const state = this.resolveHandleState(input.handle);
-    const useArgDelivery = input.promptDelivery === "arg";
     const args = this.buildPromptArgs({
       agent: state.agent,
       sessionName: state.name,
       cwd: state.cwd,
-      promptDelivery: input.promptDelivery,
-      promptText: useArgDelivery ? input.text : undefined,
     });
 
     const cancelOnAbort = async () => {
@@ -279,11 +257,7 @@ export class AcpxRuntime implements AcpRuntime {
       // Ignore EPIPE when the child exits before stdin flush completes.
     });
 
-    if (useArgDelivery) {
-      // Prompt text is passed as a CLI argument; keep stdin open.
-    } else {
-      child.stdin.end(input.text);
-    }
+    child.stdin.end(input.text);
 
     let stderr = "";
     child.stderr.on("data", (chunk) => {
@@ -564,13 +538,7 @@ export class AcpxRuntime implements AcpRuntime {
     return ["--format", "json", "--json-strict", "--cwd", params.cwd, ...params.command];
   }
 
-  private buildPromptArgs(params: {
-    agent: string;
-    sessionName: string;
-    cwd: string;
-    promptDelivery?: "arg" | "stdin";
-    promptText?: string;
-  }): string[] {
+  private buildPromptArgs(params: { agent: string; sessionName: string; cwd: string }): string[] {
     const args = [
       "--format",
       "json",
@@ -585,19 +553,7 @@ export class AcpxRuntime implements AcpRuntime {
       args.push("--timeout", String(this.config.timeoutSeconds));
     }
     args.push("--ttl", String(this.queueOwnerTtlSeconds));
-    // OXSCI PATCH: use `exec` for claude agent to work around session
-    // persistence bug (see ensureSession comment for details).
-    if (params.agent === "claude") {
-      if (params.promptDelivery === "arg" && params.promptText) {
-        args.push(params.agent, "exec", params.promptText);
-      } else {
-        args.push(params.agent, "exec", "--file", "-");
-      }
-    } else if (params.promptDelivery === "arg" && params.promptText) {
-      args.push(params.agent, "prompt", "--session", params.sessionName, params.promptText);
-    } else {
-      args.push(params.agent, "prompt", "--session", params.sessionName, "--file", "-");
-    }
+    args.push(params.agent, "prompt", "--session", params.sessionName, "--file", "-");
     return args;
   }
 

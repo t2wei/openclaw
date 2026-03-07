@@ -190,10 +190,6 @@ export const FIELD_HELP: Record<string, string> = {
     "Maximum characters for projected ACP session/update lines (tool/status updates).",
   "acp.stream.replyRouting":
     "ACP reply routing mode: route (default) sends via outbound adapter to originating channel, dispatcher forces replies through session dispatcher (preserves topic routing and WebChat visibility), silent suppresses all external delivery while preserving session context.",
-  "acp.stream.callbackToParent":
-    "When true, inject accumulated ACP turn output into the parent session after the turn completes. The parent agent then decides whether and how to relay the result to the user. Requires the child ACP session to have a recorded spawnedBy parent key.",
-  "acp.stream.promptDelivery":
-    "How the prompt text is delivered to the acpx child process: stdin (default) passes text via --file - and closes stdin, arg passes text as a positional CLI argument keeping stdin open for potential future bidirectional communication.",
   "acp.stream.tagVisibility":
     "Per-sessionUpdate visibility overrides for ACP projection (for example usage_update, available_commands_update).",
   "acp.runtime.ttlMinutes":
