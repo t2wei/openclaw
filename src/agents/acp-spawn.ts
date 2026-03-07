@@ -259,13 +259,6 @@ export async function spawnAcpDirect(
     requestedMode: params.mode,
     threadRequested: requestThreadBinding,
   });
-  if (spawnMode === "session" && !requestThreadBinding) {
-    return {
-      status: "error",
-      error: 'mode="session" requires thread=true so the ACP session can stay bound to a thread.',
-    };
-  }
-
   const targetAgentResult = resolveTargetAcpAgentId({
     requestedAgentId: params.agentId,
     cfg,
