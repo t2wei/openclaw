@@ -402,7 +402,10 @@ export async function spawnAcpDirect(
   const inferredDeliveryTo = boundThreadId
     ? `channel:${boundThreadId}`
     : requesterOrigin?.to?.trim() || (deliveryThreadId ? `channel:${deliveryThreadId}` : undefined);
-  const hasDeliveryTarget = Boolean(requesterOrigin?.channel && inferredDeliveryTo);
+  // Only deliver to external channels for thread-bound (H2A) spawns.
+  // A2A spawns (thread=false) keep output internal via sessions_send.
+  const hasDeliveryTarget =
+    requestThreadBinding && Boolean(requesterOrigin?.channel && inferredDeliveryTo);
   const childIdem = crypto.randomUUID();
   let childRunId: string = childIdem;
   try {
