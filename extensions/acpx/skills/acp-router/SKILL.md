@@ -1,6 +1,6 @@
 ---
 name: acp-router
-description: Route requests for Codex, Claude Code, Pi, OpenCode, Gemini CLI, or Kimi into OpenClaw ACP runtime sessions. Use `sessions_spawn` with `mode: "run"` and wait for callbacks — do NOT poll or query session status.
+description: Route requests for Codex, Claude Code, Pi, OpenCode, Gemini CLI, or Kimi into OpenClaw ACP runtime sessions. Use `sessions_spawn` to create sessions and `sessions_send` for follow-ups.
 user-invocable: false
 ---
 
@@ -32,11 +32,10 @@ If policy rejects the chosen id, report the error and ask the user for the allow
 Use `sessions_spawn` with:
 
 - `runtime: "acp"`
-- `mode: "run"` (always — do NOT use `mode: "session"`)
 - `agentId`: set explicitly
 - `task`: put the full task description here
-
-Do NOT set `thread: true` unless the user explicitly asks for a thread-bound session.
+- `mode: "session"` — persistent session with multi-turn context
+- Do NOT set `thread: true` unless the user explicitly asks for a thread-bound session (H2A mode)
 
 Example:
 
@@ -45,53 +44,58 @@ Example:
   "task": "Write a Python script that prints hello world",
   "runtime": "acp",
   "agentId": "codex",
-  "mode": "run"
+  "mode": "session"
 }
 ```
+
+### Mode reference
+
+| mode        | thread            | Behavior                                      | Use case                        |
+| ----------- | ----------------- | --------------------------------------------- | ------------------------------- |
+| `"session"` | `false` (default) | Persistent session, A2A via `sessions_send`   | Agent-to-agent multi-turn       |
+| `"session"` | `true`            | Persistent, bound to external channel thread  | Human-to-agent via Lark/Discord |
+| `"run"`     | any               | One-shot execution, session closed after turn | Single task, no follow-up       |
 
 ## After spawning: WAIT, do NOT poll
 
 **Critical behavior rule:** After `sessions_spawn` returns `status: "accepted"`:
 
-1. Tell the user the task has been dispatched and you are waiting for results.
-2. **End your turn immediately.** Do NOT call any of these:
+1. Tell the user the task has been dispatched.
+2. Note the `childSessionKey` from the spawn result — you need it for follow-ups.
+3. **End your turn immediately.** Do NOT call any of these:
    - `sessions_list` / `sessions_history` / `subagents(list)` to check status
    - `exec` to run `ps`, `grep`, or check logs
    - `sleep` / `process(poll)` to wait
-3. The ACP agent's output will arrive as an **automatic callback message** in your session (with `provenance: inter_session`). Just wait for it.
-4. When the callback arrives, read it and respond to the user.
+4. The ACP agent runs asynchronously. Wait for the user to ask about results, or for a system event.
 
-**Why:** ACP runs asynchronously. The callback is injected into your session automatically when the ACP agent completes its turn. Polling wastes tokens and time.
+**Why:** ACP runs asynchronously. Polling wastes tokens and time.
 
-## Multi-turn ACP interaction (ask-and-answer)
+## Multi-turn interaction via sessions_send
 
-When the ACP agent asks a question (its output is a question rather than a final answer):
+When you need to send follow-up messages to the ACP session (e.g., answer a question, provide more context, continue the task):
 
-1. The question arrives as a callback message in your session.
-2. Decide how to answer — either from context you already have, or by asking the user.
-3. Use `sessions_send` to send your answer back to the ACP session:
+1. Use `sessions_send` with the `childSessionKey` from the spawn result:
 
 ```json
 {
   "sessionKey": "<childSessionKey from spawn>",
-  "message": "Your answer here"
+  "message": "Your follow-up message here"
 }
 ```
 
-4. After `sessions_send`, **end your turn again** and wait for the next callback.
-5. Repeat until the ACP agent returns a final result.
+2. `sessions_send` waits for the ACP agent's reply and returns it directly (default timeout: 30s).
+3. If the reply indicates the task is ongoing, you can send more messages to the same session.
 
-**The ACP agent preserves context across turns** — each `sessions_send` continues the same conversation, so the agent remembers previous questions and answers.
+**The ACP agent preserves context across turns** — each `sessions_send` continues the same conversation.
 
 ## Error handling
 
-- If `sessions_spawn` returns an error, report it to the user. Do NOT automatically retry with different parameters or fall back to direct CLI invocation.
-- If `sessions_send` returns `status: "timeout"`, the message was still delivered — this is normal. Continue waiting for the callback.
-- If the callback contains an error message (e.g., `ACP_TURN_FAILED`), report it to the user.
+- If `sessions_spawn` returns an error, report it to the user. Do NOT automatically retry with different parameters.
+- If `sessions_send` returns `status: "timeout"`, the message was still delivered — the agent is still working. You can try again later with a longer `timeoutSeconds`.
+- If `sessions_send` returns an error, report it to the user.
 
 ## What NOT to do
 
-- Do NOT use `mode: "session"` — it requires `thread: true` which is only available in thread-bound contexts.
 - Do NOT use `exec` to run `acpx` CLI commands directly. Always use `sessions_spawn` / `sessions_send`.
 - Do NOT use `subagents` runtime for harness control.
 - Do NOT poll session status, check logs, or run diagnostic commands after spawning.
