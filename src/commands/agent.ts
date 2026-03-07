@@ -4,7 +4,6 @@ import { toAcpRuntimeError } from "../acp/runtime/errors.js";
 import { callGateway } from "../gateway/call.js";
 import { generateSecureUuid } from "../infra/secure-random.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
-import { INTERNAL_MESSAGE_CHANNEL } from "../utils/message-channel.js";
 
 const log = createSubsystemLogger("commands/agent");
 import {
@@ -578,6 +577,10 @@ async function agentCommandInternal(
       // Fires for all ACP turns (both bootstrap spawn and sessions_send follow-ups)
       // because sessions_send's synchronous reply path may return empty for ACP sessions
       // (ACP output flows through event stream, not always captured in chat.history).
+      //
+      // deliver: true — let the parent session deliver to its external channel (feishu/discord/etc.)
+      // channel is omitted — gateway resolves to the parent session's lastChannel,
+      // so the reply routes back to the original channel (not locked to webchat).
       if (!opts.deliver && sessionEntry?.spawnedBy && finalText) {
         const parentKey = sessionEntry.spawnedBy;
         const acpAgent = resolveAgentIdFromSessionKey(sessionKey);
@@ -587,8 +590,8 @@ async function agentCommandInternal(
             message: finalText,
             sessionKey: parentKey,
             idempotencyKey: generateSecureUuid(),
-            deliver: false,
-            channel: INTERNAL_MESSAGE_CHANNEL,
+            deliver: true,
+            bestEffortDeliver: true,
             lane: AGENT_LANE_NESTED,
             extraSystemPrompt: [
               "ACP callback: the following is output from an ACP agent turn.",
