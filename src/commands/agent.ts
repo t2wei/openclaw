@@ -1,7 +1,10 @@
 import { getAcpSessionManager } from "../acp/control-plane/manager.js";
 import { resolveAcpAgentPolicyError, resolveAcpDispatchPolicyError } from "../acp/policy.js";
 import { toAcpRuntimeError } from "../acp/runtime/errors.js";
+import { callGateway } from "../gateway/call.js";
+import { generateSecureUuid } from "../infra/secure-random.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
+import { INTERNAL_MESSAGE_CHANNEL } from "../utils/message-channel.js";
 
 const log = createSubsystemLogger("commands/agent");
 import {
@@ -19,7 +22,7 @@ import { getCliSessionId, setCliSessionId } from "../agents/cli-session.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../agents/defaults.js";
 import { FailoverError } from "../agents/failover-error.js";
 import { formatAgentInternalEventsForPrompt } from "../agents/internal-events.js";
-import { AGENT_LANE_SUBAGENT } from "../agents/lanes.js";
+import { AGENT_LANE_NESTED, AGENT_LANE_SUBAGENT } from "../agents/lanes.js";
 import { loadModelCatalog } from "../agents/model-catalog.js";
 import { runWithModelFallback } from "../agents/model-fallback.js";
 import {
@@ -570,6 +573,42 @@ async function agentCommandInternal(
           stopReason,
         },
       };
+
+      // A2A callback: inject ACP output into parent session.
+      // Only fires for bootstrap (spawn) turns, NOT sessions_send follow-ups
+      // (sessions_send already returns reply synchronously).
+      const isSessionsSendTurn = opts.inputProvenance?.sourceTool === "sessions_send";
+      if (!opts.deliver && sessionEntry?.spawnedBy && finalText && !isSessionsSendTurn) {
+        const parentKey = sessionEntry.spawnedBy;
+        const acpAgent = resolveAgentIdFromSessionKey(sessionKey);
+        callGateway({
+          method: "agent",
+          params: {
+            message: finalText,
+            sessionKey: parentKey,
+            idempotencyKey: generateSecureUuid(),
+            deliver: false,
+            channel: INTERNAL_MESSAGE_CHANNEL,
+            lane: AGENT_LANE_NESTED,
+            extraSystemPrompt: [
+              "ACP callback: the following is output from an ACP agent turn.",
+              `ACP agent: ${acpAgent}.`,
+              `ACP session: ${sessionKey}.`,
+              "Decide how to relay this to the user.",
+            ].join("\n"),
+            inputProvenance: {
+              kind: "inter_session",
+              sourceSessionKey: sessionKey,
+              sourceTool: "acp_callback",
+            },
+          },
+          timeoutMs: 15_000,
+        }).catch((err) => {
+          log.warn?.(
+            `A2A callback to parent ${parentKey} failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        });
+      }
 
       return await deliverAgentCommandResult({
         cfg,

@@ -56,25 +56,22 @@ Example:
 | `"session"` | `true`            | Persistent, bound to external channel thread  | Human-to-agent via Lark/Discord |
 | `"run"`     | any               | One-shot execution, session closed after turn | Single task, no follow-up       |
 
-## After spawning: WAIT, do NOT poll
+## After spawning: wait for callback
 
-**Critical behavior rule:** After `sessions_spawn` returns `status: "accepted"`:
+After `sessions_spawn` returns `status: "accepted"`:
 
-1. Tell the user the task has been dispatched.
-2. Note the `childSessionKey` from the spawn result — you need it for follow-ups.
-3. **End your turn immediately.** Do NOT call any of these:
-   - `sessions_list` / `sessions_history` / `subagents(list)` to check status
-   - `exec` to run `ps`, `grep`, or check logs
-   - `sleep` / `process(poll)` to wait
-4. The ACP agent runs asynchronously. Wait for the user to ask about results, or for a system event.
+1. Note the `childSessionKey` from the spawn result.
+2. **End your turn immediately.** Do NOT poll, fetch history, or wait in a loop.
+3. The ACP agent's output will be **automatically injected into your session** as a callback message when the agent completes its turn.
+4. When you receive the callback, relay the result to the user.
 
-**Why:** ACP runs asynchronously. Polling wastes tokens and time.
+**Why:** In A2A mode, the framework automatically injects the ACP agent's first-turn output back into your session. You do not need to fetch it manually.
 
 ## Multi-turn interaction via sessions_send
 
-When you need to send follow-up messages to the ACP session (e.g., answer a question, provide more context, continue the task):
+When you need to send follow-up messages to the ACP session (e.g., answer the agent's question, provide more context, continue the task):
 
-1. Use `sessions_send` with the `childSessionKey` from the spawn result:
+1. Use `sessions_send` with the `childSessionKey`:
 
 ```json
 {
@@ -84,7 +81,8 @@ When you need to send follow-up messages to the ACP session (e.g., answer a ques
 ```
 
 2. `sessions_send` waits for the ACP agent's reply and returns it directly (default timeout: 30s).
-3. If the reply indicates the task is ongoing, you can send more messages to the same session.
+3. If the reply indicates the task is ongoing or the agent asks another question, you can send more messages.
+4. **Report each reply to the user** — they cannot see the ACP session directly.
 
 **The ACP agent preserves context across turns** — each `sessions_send` continues the same conversation.
 
