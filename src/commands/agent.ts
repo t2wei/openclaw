@@ -575,10 +575,10 @@ async function agentCommandInternal(
       };
 
       // A2A callback: inject ACP output into parent session.
-      // Only fires for bootstrap (spawn) turns, NOT sessions_send follow-ups
-      // (sessions_send already returns reply synchronously).
-      const isSessionsSendTurn = opts.inputProvenance?.sourceTool === "sessions_send";
-      if (!opts.deliver && sessionEntry?.spawnedBy && finalText && !isSessionsSendTurn) {
+      // Fires for all ACP turns (both bootstrap spawn and sessions_send follow-ups)
+      // because sessions_send's synchronous reply path may return empty for ACP sessions
+      // (ACP output flows through event stream, not always captured in chat.history).
+      if (!opts.deliver && sessionEntry?.spawnedBy && finalText) {
         const parentKey = sessionEntry.spawnedBy;
         const acpAgent = resolveAgentIdFromSessionKey(sessionKey);
         callGateway({

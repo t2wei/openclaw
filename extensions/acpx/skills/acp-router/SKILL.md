@@ -80,9 +80,10 @@ When you need to send follow-up messages to the ACP session (e.g., answer the ag
 }
 ```
 
-2. `sessions_send` waits for the ACP agent's reply and returns it directly (default timeout: 30s).
-3. If the reply indicates the task is ongoing or the agent asks another question, you can send more messages.
-4. **Report each reply to the user** — they cannot see the ACP session directly.
+2. `sessions_send` delivers the message to the ACP agent. **End your turn immediately after calling it.**
+3. The ACP agent's reply will be automatically injected into your session as a callback (same as the initial spawn).
+4. When you receive the callback, relay the result to the user.
+5. Do NOT rely on `sessions_send`'s return value for the ACP agent's reply — it may be empty.
 
 **The ACP agent preserves context across turns** — each `sessions_send` continues the same conversation.
 
