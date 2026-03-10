@@ -326,7 +326,15 @@ export class FeishuStreamingSession {
 
   async close(
     finalText?: string,
-    options?: { addFullTextPanel?: boolean; historyText?: string },
+    options?: {
+      addFullTextPanel?: boolean;
+      historyText?: string;
+      panelStyle?: {
+        title?: string;
+        headerBackgroundColor?: string;
+        borderColor?: string;
+      };
+    },
   ): Promise<void> {
     if (!this.state || this.closed) {
       return;
@@ -361,6 +369,9 @@ export class FeishuStreamingSession {
     if (options?.addFullTextPanel && text) {
       // Use accumulated history entries when available; fall back to final text
       const panelContent = options.historyText ?? text;
+      const ps = options.panelStyle;
+      const headerBg = ps?.headerBackgroundColor;
+      const borderColor = ps?.borderColor ?? "grey";
       batchActions.push({
         action: "add_elements",
         params: {
@@ -372,8 +383,9 @@ export class FeishuStreamingSession {
               header: {
                 title: {
                   tag: "plain_text",
-                  content: "history",
+                  content: ps?.title ?? "history",
                 },
+                ...(headerBg ? { background_color: headerBg } : {}),
                 vertical_align: "center",
                 icon: {
                   tag: "standard_icon",
@@ -383,7 +395,7 @@ export class FeishuStreamingSession {
                 icon_position: "follow_text",
                 icon_expanded_angle: -180,
               },
-              border: { color: "grey", corner_radius: "5px" },
+              border: { color: borderColor, corner_radius: "5px" },
               padding: "8px 8px 8px 8px",
               element_id: "full_text_panel",
               elements: [
