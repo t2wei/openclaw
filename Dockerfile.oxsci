@@ -46,7 +46,7 @@ RUN pnpm ui:build
 # Install jq (required by skills that parse JSON)
 # Expose CLI binary without requiring npm global writes as non-root
 USER root
-RUN apt-get update && apt-get install -y --no-install-recommends jq \
+RUN apt-get update && apt-get install -y --no-install-recommends jq bc \
  && rm -rf /var/lib/apt/lists/*
 RUN ln -sf /app/openclaw.mjs /usr/local/bin/openclaw \
  && chmod 755 /app/openclaw.mjs
