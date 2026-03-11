@@ -84,7 +84,7 @@ export const feishuOutbound: ChannelOutboundAdapter = {
   chunker: (text, limit) => getFeishuRuntime().channel.text.chunkMarkdownText(text, limit),
   chunkerMode: "markdown",
   textChunkLimit: 4000,
-  sendText: async ({ cfg, to, text, accountId, replyToId, threadId }) => {
+  sendText: async ({ cfg, to, text, accountId, replyToId, threadId, mediaLocalRoots }) => {
     const threadParams = resolveFeishuThreadParams({ replyToId, threadId });
     // Scheme A compatibility shim:
     // when upstream accidentally returns a local image path as plain text,
@@ -98,6 +98,7 @@ export const feishuOutbound: ChannelOutboundAdapter = {
           mediaUrl: localImagePath,
           accountId: accountId ?? undefined,
           ...threadParams,
+          mediaLocalRoots,
         });
         return { channel: "feishu", ...result };
       } catch (err) {
