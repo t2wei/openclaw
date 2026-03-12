@@ -116,14 +116,17 @@ User → Main Agent
 
 ## Files changed
 
-| File                                         | Change                                                                                                                            |
-| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `src/agents/tools/sessions-send-core.ts`     | **New.** Extracted `resolveAndBuildSendParams()` shared by `sessions_send` and `acp_send`.                                        |
-| `src/agents/tools/acp-send-tool.ts`          | **New.** `acp_send` tool — fire-and-forget, no A2A flow.                                                                          |
-| `src/agents/tools/sessions-send-tool.ts`     | **Refactored.** Uses `resolveAndBuildSendParams()` from core. No behavior change.                                                 |
-| `src/agents/openclaw-tools.ts`               | **Modified.** Registers `createAcpSendTool`.                                                                                      |
-| `src/commands/agent.ts`                      | **Modified.** Callback uses `deliver: false` + explicit channel routing via `extractDeliveryInfo`. Moved before ACP early-return. |
-| `extensions/acpx/skills/acp-router/SKILL.md` | **Modified.** Replaced `sessions_send` with `acp_send` in ACP communication instructions.                                         |
+| File                                         | Change                                                                                                                           |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `src/agents/tools/sessions-send-core.ts`     | **New.** Extracted `resolveAndBuildSendParams()` shared by `sessions_send` and `acp_send`.                                       |
+| `src/agents/tools/acp-send-tool.ts`          | **New.** `acp_send` tool — fire-and-forget, no A2A flow.                                                                         |
+| `src/agents/tools/sessions-cancel-tool.ts`   | **New.** `sessions_cancel` tool — cancel the active turn of a spawned ACP session.                                               |
+| `src/agents/tools/sessions-send-tool.ts`     | **Refactored.** Uses `resolveAndBuildSendParams()` from core. No behavior change.                                                |
+| `src/agents/openclaw-tools.ts`               | **Modified.** Registers `createAcpSendTool` and `createSessionsCancelTool`.                                                      |
+| `src/commands/agent.ts`                      | **Modified.** Callback uses `deliver: true` + explicit channel routing via `extractDeliveryInfo`. Moved before ACP early-return. |
+| `src/gateway/server-methods/sessions.ts`     | **Modified.** Added `sessions.cancel` RPC handler calling `acpManager.cancelSession()`.                                          |
+| `src/gateway/protocol/schema/sessions.ts`    | **Modified.** Added `SessionsCancelParamsSchema`.                                                                                |
+| `extensions/acpx/skills/acp-router/SKILL.md` | **Modified.** Replaced `sessions_send` with `acp_send` in ACP communication instructions.                                        |
 
 ## Design decisions
 
@@ -134,3 +137,5 @@ User → Main Agent
 3. **`deliver: true` + explicit channel for reliable delivery.** The callback uses `deliver: true` so the parent agent's reply is delivered to the external channel, combined with explicit `channel/to/threadId/accountId` from `extractDeliveryInfo` for race-safe routing. The parent agent can still suppress delivery by replying `NO_REPLY` for duplicate or irrelevant callbacks.
 
 4. **`sourceTool: "acp_send"` / `"acp_callback"` provenance.** Both the send and callback paths set distinct `inputProvenance.sourceTool` values, enabling downstream logic to distinguish ACP-originated messages from general agent-to-agent traffic.
+
+5. **`sessions_cancel` for ACP turn interruption.** With the A2A model, the main agent is idle between ACP turns and needs the ability to interrupt a running ACP turn (e.g., cancel a runaway Codex session). The `sessions_cancel` tool calls the existing `acpManager.cancelSession()` via a new `sessions.cancel` gateway RPC. Cancel interrupts only the active turn — the session remains open for future messages. This is lighter than `sessions.reset` (which clears history) or `sessions.delete` (which removes the session entirely).

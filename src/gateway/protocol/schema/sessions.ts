@@ -98,6 +98,14 @@ export const SessionsResetParamsSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const SessionsCancelParamsSchema = Type.Object(
+  {
+    key: NonEmptyString,
+    reason: Type.Optional(Type.String({ maxLength: 256 })),
+  },
+  { additionalProperties: false },
+);
+
 export const SessionsDeleteParamsSchema = Type.Object(
   {
     key: NonEmptyString,
