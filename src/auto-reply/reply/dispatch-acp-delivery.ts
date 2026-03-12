@@ -140,7 +140,9 @@ export function createAcpDispatchDeliveryCoordinator(params: {
       ttsAuto: params.sessionTtsAuto,
     });
 
-    if (params.shouldRouteToOriginating && params.originatingChannel && params.originatingTo) {
+    const originatingChannel = params.originatingChannel;
+    const originatingTo = params.originatingTo;
+    if (params.shouldRouteToOriginating && originatingChannel && originatingTo) {
       const toolCallId = meta?.toolCallId?.trim();
       if (kind === "tool" && meta?.allowEdit === true && toolCallId) {
         const edited = await tryEditToolMessage(ttsPayload, toolCallId);
@@ -151,8 +153,8 @@ export function createAcpDispatchDeliveryCoordinator(params: {
 
       const result = await routeReply({
         payload: ttsPayload,
-        channel: params.originatingChannel,
-        to: params.originatingTo,
+        channel: originatingChannel,
+        to: originatingTo,
         sessionKey: params.ctx.SessionKey,
         accountId: params.ctx.AccountId,
         threadId: params.ctx.MessageThreadId,
@@ -166,9 +168,9 @@ export function createAcpDispatchDeliveryCoordinator(params: {
       }
       if (kind === "tool" && meta?.toolCallId && result.messageId) {
         state.toolMessageByCallId.set(meta.toolCallId, {
-          channel: params.originatingChannel,
+          channel: originatingChannel,
           accountId: params.ctx.AccountId,
-          to: params.originatingTo,
+          to: originatingTo,
           ...(params.ctx.MessageThreadId != null ? { threadId: params.ctx.MessageThreadId } : {}),
           messageId: result.messageId,
         });
