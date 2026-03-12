@@ -7,6 +7,7 @@ import type { SandboxFsBridge } from "./sandbox/fs-bridge.js";
 import type { SpawnedToolContext } from "./spawned-context.js";
 import type { ToolFsPolicy } from "./tool-fs-policy.js";
 import { createAcpSendTool } from "./tools/acp-send-tool.js";
+import { createSessionsCancelTool } from "./tools/sessions-cancel-tool.js";
 import { createAgentsListTool } from "./tools/agents-list-tool.js";
 import { createBrowserTool } from "./tools/browser-tool.js";
 import { createCanvasTool } from "./tools/canvas-tool.js";
@@ -187,6 +188,7 @@ export function createOpenClawTools(
       agentChannel: options?.agentChannel,
       sandboxed: options?.sandboxed,
     }),
+    createSessionsCancelTool(),
     createSessionsSpawnTool({
       agentSessionKey: options?.agentSessionKey,
       agentChannel: options?.agentChannel,
