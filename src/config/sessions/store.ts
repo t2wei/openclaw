@@ -19,6 +19,11 @@ import { getFileStatSnapshot, isCacheEnabled, resolveCacheTtlMs } from "../cache
 import { enforceSessionDiskBudget, type SessionDiskBudgetSweepResult } from "./disk-budget.js";
 import { deriveSessionMetaPatch } from "./metadata.js";
 import {
+  getRedisSessionMirror,
+  isRedisSessionBackendActive,
+  updateRedisSessionMirror,
+} from "./redis-backend.js";
+import {
   clearSessionStoreCaches,
   dropSessionStoreObjectCache,
   getSerializedSessionStore,
@@ -196,6 +201,14 @@ export function loadSessionStore(
   storePath: string,
   opts: LoadSessionStoreOptions = {},
 ): Record<string, SessionEntry> {
+  // Redis in-memory mirror: zero disk I/O fast path.
+  if (!opts.skipCache && isRedisSessionBackendActive()) {
+    const redisMirror = getRedisSessionMirror(storePath);
+    if (redisMirror) {
+      return structuredClone(redisMirror);
+    }
+  }
+
   // Check cache first if enabled
   if (!opts.skipCache && isSessionStoreCacheEnabled()) {
     const currentFileStat = getFileStatSnapshot(storePath);
@@ -335,6 +348,11 @@ function updateSessionStoreWriteCaches(params: {
     sizeBytes: fileStat?.sizeBytes,
     serialized: params.serialized,
   });
+
+  // Keep Redis mirror in sync after every write.
+  if (isRedisSessionBackendActive()) {
+    updateRedisSessionMirror(params.storePath, params.store, params.serialized);
+  }
 }
 
 async function saveSessionStoreUnlocked(
