@@ -122,6 +122,35 @@ export async function startGatewaySidecars(params: {
     params.logHooks.error(`failed to load hooks: ${String(err)}`);
   }
 
+  // Initialise Redis session backend if configured.
+  if (params.cfg.session?.redis?.url) {
+    try {
+      const { initRedisSessionBackend } = await import("../config/sessions/redis-backend.js");
+      const { resolveStorePath } = await import("../config/sessions/paths.js");
+      const { loadSessionStore } = await import("../config/sessions/store.js");
+      const storePath = resolveStorePath(params.cfg.session?.store);
+      await initRedisSessionBackend(
+        {
+          redisUrl: params.cfg.session.redis.url,
+          storePaths: [storePath],
+          keyPrefix: params.cfg.session.redis.keyPrefix,
+        },
+        (sp) => {
+          // Seed callback: load from disk when Redis is empty.
+          try {
+            const store = loadSessionStore(sp, { skipCache: true });
+            const serialized = JSON.stringify(store);
+            return { store, serialized };
+          } catch {
+            return undefined;
+          }
+        },
+      );
+    } catch (err) {
+      params.log.warn(`redis session backend init failed: ${String(err)}`);
+    }
+  }
+
   // Launch configured channels so gateway replies via the surface the message came from.
   // Tests can opt out via OPENCLAW_SKIP_CHANNELS (or legacy OPENCLAW_SKIP_PROVIDERS).
   const skipChannels =

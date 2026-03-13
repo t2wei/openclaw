@@ -96,6 +96,11 @@ jobs:
               'ANTHROPIC_API_KEY': '/prod/llm/ANTHROPIC_AUTH_TOKEN',
               'ANTHROPIC_BASE_URL': '/prod/llm/ANTHROPIC_BASE_URL',
               'OXSCI_CODEX_API_KEY': '/prod/llm/OXSCI_CODEX_API_KEY',
+              'TELEGRAM_BOT_TOKEN': '/prod/openclaw/TELEGRAM_BOT_TOKEN',
+              'TELEGRAM_WEBHOOK_SECRET': '/prod/openclaw/TELEGRAM_WEBHOOK_SECRET',
+              'FEISHU_APP_ID': '/prod/openclaw/FEISHU_APP_ID',
+              'FEISHU_APP_SECRET': '/prod/openclaw/FEISHU_APP_SECRET',
+              'FEISHU_VERIFICATION_TOKEN': '/prod/openclaw/FEISHU_VERIFICATION_TOKEN',
           }
 
           existing = {s['name']: s for s in (container.get('secrets') or [])}
