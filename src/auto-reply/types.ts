@@ -58,6 +58,10 @@ export type GetReplyOptions = {
    * Unlike onBlockReply, this does NOT affect didStream or final payload suppression.
    * Use this to observe intermediate narration steps without interfering with delivery. */
   onBlockNotify?: (payload: ReplyPayload) => void;
+  /** Called when context auto-compaction starts (allows UX feedback during the pause). */
+  onCompactionStart?: () => Promise<void> | void;
+  /** Called when context auto-compaction completes. */
+  onCompactionEnd?: () => Promise<void> | void;
   /** Called when the actual model is selected (including after fallback).
    * Use this to get model/provider/thinkLevel for responsePrefix template interpolation. */
   onModelSelected?: (ctx: ModelSelectedContext) => void;

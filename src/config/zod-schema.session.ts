@@ -176,6 +176,7 @@ export const MessagesSchema = z
             error: z.string().optional(),
             stallSoft: z.string().optional(),
             stallHard: z.string().optional(),
+            compacting: z.string().optional(),
           })
           .strict()
           .optional(),
