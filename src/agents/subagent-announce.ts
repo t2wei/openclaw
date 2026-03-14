@@ -615,6 +615,7 @@ async function sendAnnounce(item: AnnounceQueueItem) {
       accountId: requesterIsSubagent ? undefined : origin?.accountId,
       to: requesterIsSubagent ? undefined : origin?.to,
       threadId: requesterIsSubagent ? undefined : threadId,
+      replyTargetId: requesterIsSubagent ? undefined : origin?.replyTargetId,
       deliver: !requesterIsSubagent,
       internalEvents: item.internalEvents,
       inputProvenance: {
@@ -814,6 +815,9 @@ async function sendSubagentAnnounceDirectly(params: {
             accountId: shouldDeliverExternally ? effectiveDirectOrigin?.accountId : undefined,
             to: shouldDeliverExternally ? directTo : undefined,
             threadId: shouldDeliverExternally ? threadId : undefined,
+            replyTargetId: shouldDeliverExternally
+              ? effectiveDirectOrigin?.replyTargetId
+              : undefined,
             inputProvenance: {
               kind: "inter_session",
               sourceSessionKey: params.sourceSessionKey,

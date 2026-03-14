@@ -312,8 +312,9 @@ function registerEventHandlers(
       if (!chatId || !senderId) {
         return null;
       }
+      const threadId = event.message.thread_id?.trim();
       const rootId = event.message.root_id?.trim();
-      const threadKey = rootId ? `thread:${rootId}` : "chat";
+      const threadKey = threadId ? `thread:${threadId}` : rootId ? `thread:${rootId}` : "chat";
       return `feishu:${accountId}:${chatId}:${threadKey}:${senderId}`;
     },
     shouldDebounce: (event) => {

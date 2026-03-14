@@ -4,8 +4,6 @@ import { getAcpSessionManager } from "../acp/control-plane/manager.js";
 import { resolveAcpAgentPolicyError, resolveAcpDispatchPolicyError } from "../acp/policy.js";
 import { toAcpRuntimeError } from "../acp/runtime/errors.js";
 import { resolveAcpSessionCwd } from "../acp/runtime/session-identifiers.js";
-import { callGateway } from "../gateway/call.js";
-import { generateSecureUuid } from "../infra/secure-random.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 
 const log = createSubsystemLogger("commands/agent");
@@ -25,7 +23,7 @@ import { getCliSessionId, setCliSessionId } from "../agents/cli-session.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../agents/defaults.js";
 import { FailoverError } from "../agents/failover-error.js";
 import { formatAgentInternalEventsForPrompt } from "../agents/internal-events.js";
-import { AGENT_LANE_NESTED, AGENT_LANE_SUBAGENT } from "../agents/lanes.js";
+import { AGENT_LANE_SUBAGENT } from "../agents/lanes.js";
 import { loadModelCatalog } from "../agents/model-catalog.js";
 import { runWithModelFallback } from "../agents/model-fallback.js";
 import {
@@ -60,6 +58,8 @@ import {
   isSilentReplyText,
   SILENT_REPLY_TOKEN,
 } from "../auto-reply/tokens.js";
+import { getChannelPlugin, normalizeChannelId } from "../channels/plugins/index.js";
+import type { ChannelReplyDispatcherResult } from "../channels/plugins/types.adapters.js";
 import { formatCliCommand } from "../cli/command-format.js";
 import { resolveCommandSecretRefsViaGateway } from "../cli/command-secret-gateway.js";
 import { getAgentRuntimeCommandSecretTargetIds } from "../cli/command-secret-targets.js";
@@ -70,7 +70,6 @@ import {
   setRuntimeConfigSnapshot,
 } from "../config/config.js";
 import {
-  extractDeliveryInfo,
   mergeSessionEntry,
   resolveAgentIdFromSessionKey,
   type SessionEntry,
@@ -347,6 +346,14 @@ function runAgentAttempt(params: {
   sessionStore?: Record<string, SessionEntry>;
   storePath?: string;
   allowTransientCooldownProbe?: boolean;
+  outboundStreamingCallbacks?: {
+    onPartialReply: (payload: { text?: string; mediaUrls?: string[] }) => void | Promise<void>;
+    onBlockReply: (payload: {
+      text?: string;
+      mediaUrl?: string;
+      mediaUrls?: string[];
+    }) => void | Promise<void>;
+  };
 }) {
   const effectivePrompt = resolveFallbackRetryPrompt({
     body: params.body,
@@ -499,6 +506,8 @@ function runAgentAttempt(params: {
     agentDir: params.agentDir,
     allowTransientCooldownProbe: params.allowTransientCooldownProbe,
     onAgentEvent: params.onAgentEvent,
+    onPartialReply: params.outboundStreamingCallbacks?.onPartialReply,
+    onBlockReply: params.outboundStreamingCallbacks?.onBlockReply,
     bootstrapPromptWarningSignaturesSeen,
     bootstrapPromptWarningSignature,
   });
@@ -853,61 +862,6 @@ async function agentCommandInternal(
         },
       };
 
-      // A2A callback — inject ACP output into parent session.
-      // Must be here (before the ACP early-return) because the ACP code path
-      // returns from deliverAgentCommandResult below and never reaches the
-      // non-ACP callback site further down.
-      //
-      // Fires for ALL ACP turns (spawn + acp_send). The parent agent decides
-      // whether and how to relay the output to the user (may reply NO_REPLY).
-      //
-      // deliver: true — let the parent agent run deliver its reply to the
-      // external channel. Channel routing is explicitly passed from the parent
-      // session's delivery context so followup delivery routes correctly
-      // regardless of parent session entry mutations (race-safe).
-      if (!opts.deliver && sessionEntry?.spawnedBy && finalText) {
-        const parentKey = sessionEntry.spawnedBy;
-        const acpAgent = resolveAgentIdFromSessionKey(sessionKey);
-        const { deliveryContext: parentDelivery, threadId: parentThreadId } =
-          extractDeliveryInfo(parentKey);
-        log.info?.(
-          `[A2A callback] session=${sessionKey} → parent=${parentKey} agent=${acpAgent} textLen=${finalText.length} channel=${parentDelivery?.channel ?? "unknown"}`,
-        );
-        void callGateway({
-          method: "agent",
-          params: {
-            message: finalText,
-            sessionKey: parentKey,
-            idempotencyKey: generateSecureUuid(),
-            deliver: true,
-            bestEffortDeliver: true,
-            channel: parentDelivery?.channel,
-            to: parentDelivery?.to,
-            threadId: parentThreadId,
-            accountId: parentDelivery?.accountId,
-            lane: AGENT_LANE_NESTED,
-            extraSystemPrompt: [
-              "ACP callback: the following is output from an ACP agent turn.",
-              `ACP agent: ${acpAgent}.`,
-              `ACP session: ${sessionKey}.`,
-              "Decide how to relay this to the user.",
-            ].join("\n"),
-            inputProvenance: {
-              kind: "inter_session",
-              sourceSessionKey: sessionKey,
-              sourceTool: "acp_callback",
-            },
-          },
-          timeoutMs: 15_000,
-        }).then(() => {
-          log.info?.(`[A2A callback] sent OK → parent=${parentKey}`);
-        }).catch((err) => {
-          log.warn?.(
-            `[A2A callback] FAILED → parent=${parentKey}: ${err instanceof Error ? err.message : String(err)}`,
-          );
-        });
-      }
-
       return await deliverAgentCommandResult({
         cfg,
         deps,
@@ -1134,6 +1088,31 @@ async function agentCommandInternal(
       sessionEntry = resolvedSessionFile.sessionEntry;
     }
 
+    // --- Channel reply dispatcher: create for deliver-to-channel flows ---
+    let channelDispatch: ChannelReplyDispatcherResult | null = null;
+    if (opts.deliver === true && opts.channel && opts.to) {
+      const ch = normalizeChannelId(opts.channel) ?? opts.channel;
+      const plugin = getChannelPlugin(ch);
+      if (plugin?.replyDispatcher) {
+        try {
+          channelDispatch =
+            plugin.replyDispatcher.createReplyDispatcher({
+              cfg,
+              agentId: sessionAgentId,
+              runtime,
+              chatId: opts.to,
+              threadId: opts.threadId,
+              replyTargetId: opts.replyTargetId,
+              accountId: opts.accountId,
+            }) ?? null;
+        } catch (err) {
+          log.warn?.(
+            `[channel-reply-dispatcher] create failed, falling back to default delivery: ${String(err)}`,
+          );
+        }
+      }
+    }
+
     const startedAt = Date.now();
     let lifecycleEnded = false;
 
@@ -1203,7 +1182,27 @@ async function agentCommandInternal(
               ) {
                 lifecycleEnded = true;
               }
+              // Forward tool start events to channel dispatcher (for streaming card history panel).
+              if (
+                channelDispatch &&
+                evt.stream === "tool" &&
+                typeof evt.data?.phase === "string" &&
+                evt.data.phase === "start"
+              ) {
+                void channelDispatch.replyOptions.onToolStart?.({
+                  name: typeof evt.data.name === "string" ? evt.data.name : undefined,
+                  phase: evt.data.phase,
+                });
+              }
             },
+            outboundStreamingCallbacks: channelDispatch
+              ? {
+                  onPartialReply: (p) => channelDispatch.replyOptions.onPartialReply?.(p),
+                  onBlockReply: (p) => {
+                    channelDispatch.dispatcher.sendBlockReply(p);
+                  },
+                }
+              : undefined,
           });
         },
       });
@@ -1240,6 +1239,15 @@ async function agentCommandInternal(
           },
         });
       }
+      // Clean up channel dispatcher on error.
+      if (channelDispatch) {
+        try {
+          channelDispatch.dispatcher.markComplete();
+          await channelDispatch.dispatcher.waitForIdle();
+        } finally {
+          channelDispatch.markDispatchIdle();
+        }
+      }
       throw err;
     }
 
@@ -1261,10 +1269,25 @@ async function agentCommandInternal(
     }
 
     const payloads = result.payloads ?? [];
-    const finalText = payloads
-      .map((p) => p.text?.trim())
-      .filter(Boolean)
-      .join("\n");
+
+    // --- Channel reply dispatcher: send final payloads and close ---
+    if (channelDispatch) {
+      try {
+        for (const p of payloads) {
+          channelDispatch.dispatcher.sendFinalReply(p);
+        }
+        channelDispatch.dispatcher.markComplete();
+        await channelDispatch.dispatcher.waitForIdle();
+        channelDispatch.markDispatchIdle();
+        // Suppress default deliverOutboundPayloads — reply dispatcher already delivered.
+        opts.deliver = false;
+      } catch (err) {
+        log.warn?.(
+          `[channel-reply-dispatcher] close failed, falling back to default delivery: ${String(err)}`,
+        );
+        // Don't modify opts.deliver — let default path handle it.
+      }
+    }
 
     return await deliverAgentCommandResult({
       cfg,

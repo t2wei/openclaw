@@ -1,4 +1,5 @@
-import type { ReplyPayload } from "../../auto-reply/types.js";
+import type { ReplyDispatcher } from "../../auto-reply/reply/reply-dispatcher.js";
+import type { GetReplyOptions, ReplyPayload } from "../../auto-reply/types.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import type { GroupToolPolicyConfig } from "../../config/types.tools.js";
 import type { OutboundDeliveryResult, OutboundSendDeps } from "../../infra/outbound/deliver.js";
@@ -382,4 +383,90 @@ export type ChannelSecurityAdapter<ResolvedAccount = unknown> = {
     ctx: ChannelSecurityContext<ResolvedAccount>,
   ) => ChannelSecurityDmPolicy | null;
   collectWarnings?: (ctx: ChannelSecurityContext<ResolvedAccount>) => Promise<string[]> | string[];
+};
+
+// ---------------------------------------------------------------------------
+// Channel reply dispatcher factory — creates a ReplyDispatcher for outbound use.
+// Channels that support rich delivery (streaming cards, typing, etc.) implement
+// this so framework code can create a dispatcher without channel-specific knowledge.
+// ---------------------------------------------------------------------------
+
+/** Context for creating a channel reply dispatcher (outbound agent-to-channel delivery). */
+export type ChannelReplyDispatcherContext = {
+  cfg: OpenClawConfig;
+  agentId: string;
+  runtime: RuntimeEnv;
+  chatId: string;
+  threadId?: string | number | null;
+  /** Channel-specific reply target (e.g. Feishu om_ message_id for topic reply). */
+  replyTargetId?: string;
+  accountId?: string;
+};
+
+/** Result from creating a channel reply dispatcher. */
+export type ChannelReplyDispatcherResult = {
+  dispatcher: ReplyDispatcher;
+  replyOptions: Pick<
+    GetReplyOptions,
+    | "onReplyStart"
+    | "onTypingController"
+    | "onTypingCleanup"
+    | "onPartialReply"
+    | "onToolStart"
+    | "onModelSelected"
+    | "disableBlockStreaming"
+  >;
+  markDispatchIdle: () => void;
+};
+
+/** Channel adapter for creating ReplyDispatcher instances for outbound delivery. */
+export type ChannelReplyDispatcherAdapter = {
+  createReplyDispatcher: (
+    ctx: ChannelReplyDispatcherContext,
+  ) => ChannelReplyDispatcherResult | undefined;
+};
+
+// ---------------------------------------------------------------------------
+// Outbound dispatcher — lifecycle-aware outbound delivery (streaming cards etc.)
+// DEPRECATED: Being replaced by ChannelReplyDispatcherAdapter above.
+// ---------------------------------------------------------------------------
+
+/** Context passed to the outbound dispatcher factory. */
+export type OutboundDispatcherContext = {
+  cfg: OpenClawConfig;
+  channel: string;
+  to: string;
+  accountId?: string;
+  threadId?: string | number | null;
+  sessionKey?: string;
+};
+
+/** Payload type for outbound dispatcher streaming callbacks. */
+export type OutboundDispatcherPayload = {
+  text?: string;
+  mediaUrl?: string;
+  mediaUrls?: string[];
+};
+
+/** A lifecycle-aware outbound dispatcher session returned by the factory. */
+export type OutboundDispatcherSession = {
+  /** Streaming partial text update (high frequency — callee should throttle). */
+  onPartialReply: (payload: OutboundDispatcherPayload) => void | Promise<void>;
+  /** Complete block reply (one per logical message segment). */
+  onBlockReply: (payload: OutboundDispatcherPayload) => void | Promise<void>;
+  /** Finalize and close the dispatcher. Receives the final payloads from the agent turn. */
+  close: (finalPayloads: OutboundDispatcherPayload[]) => Promise<void>;
+  /** Whether the dispatcher is still active (not closed or errored). */
+  isActive: () => boolean;
+};
+
+/** Channel adapter for creating lifecycle-aware outbound dispatchers. */
+export type ChannelOutboundDispatcherAdapter = {
+  /**
+   * Create a dispatcher session for an outbound delivery.
+   * Return `undefined` to fall back to the default stateless delivery path.
+   */
+  createDispatcher: (
+    ctx: OutboundDispatcherContext,
+  ) => Promise<OutboundDispatcherSession | undefined>;
 };
