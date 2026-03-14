@@ -340,6 +340,9 @@ export const validateSessionsCompactParams = ajv.compile<SessionsCompactParams>(
 );
 export const validateSessionsUsageParams =
   ajv.compile<SessionsUsageParams>(SessionsUsageParamsSchema);
+export const validateSessionsCancelParams = ajv.compile<SessionsCancelParams>(
+  SessionsCancelParamsSchema,
+);
 export const validateConfigGetParams = ajv.compile<ConfigGetParams>(ConfigGetParamsSchema);
 export const validateConfigSetParams = ajv.compile<ConfigSetParams>(ConfigSetParamsSchema);
 export const validateConfigApplyParams = ajv.compile<ConfigApplyParams>(ConfigApplyParamsSchema);
@@ -500,6 +503,7 @@ export {
   SessionsResetParamsSchema,
   SessionsCancelParamsSchema,
   SessionsDeleteParamsSchema,
+  SessionsCancelParamsSchema,
   SessionsCompactParamsSchema,
   SessionsUsageParamsSchema,
   ConfigGetParamsSchema,
@@ -656,6 +660,7 @@ export type {
   SessionsResetParams,
   SessionsCancelParams,
   SessionsDeleteParams,
+  SessionsCancelParams,
   SessionsCompactParams,
   SessionsUsageParams,
   CronJob,

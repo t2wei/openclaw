@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { getAcpSessionManager } from "../../acp/control-plane/manager.js";
 import { resolveDefaultAgentId } from "../../agents/agent-scope.js";
 import { loadConfig } from "../../config/config.js";
 import {
@@ -475,5 +476,26 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       },
       undefined,
     );
+  },
+  "sessions.cancel": async ({ params, respond }) => {
+    if (!assertValidParams(params, validateSessionsCancelParams, "sessions.cancel", respond)) {
+      return;
+    }
+    const p = params;
+    const key = requireSessionKey(p.key, respond);
+    if (!key) {
+      return;
+    }
+    const reason = typeof p.reason === "string" ? p.reason : "agent-requested";
+    const cfg = loadConfig();
+    const acpManager = getAcpSessionManager();
+    try {
+      await acpManager.cancelSession({ cfg, sessionKey: key, reason });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      respond(false, undefined, errorShape(ErrorCodes.INTERNAL_ERROR, msg));
+      return;
+    }
+    respond(true, { ok: true, key }, undefined);
   },
 };
