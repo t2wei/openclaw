@@ -226,6 +226,7 @@ type ResolvedFeishuGroupSession = {
   groupSessionScope: GroupSessionScope;
   replyInThread: boolean;
   threadReply: boolean;
+  topicScope: string | null;
 };
 
 function resolveFeishuGroupSession(params: {
@@ -261,12 +262,12 @@ function resolveFeishuGroupSession(params: {
     feishuCfg?.groupSessionScope ??
     (legacyTopicSessionMode === "enabled" ? "group_topic" : "group");
 
-  // Keep topic session keys stable across the "first turn creates thread" flow:
-  // first turn may only have message_id, while the next turn carries root_id/thread_id.
-  // Prefer root_id first so both turns stay on the same peer key.
+  // Keep topic session keys stable: prefer thread_id (omt_xxx) because it is
+  // present on ALL messages in a topic — including the topic-creating message
+  // which has no root_id.  root_id (om_xxx) only appears on reply messages.
   const topicScope =
     groupSessionScope === "group_topic" || groupSessionScope === "group_topic_sender"
-      ? (normalizedRootId ?? normalizedThreadId ?? (replyInThread ? messageId : null))
+      ? (normalizedThreadId ?? normalizedRootId ?? (replyInThread ? messageId : null))
       : null;
 
   let peerId = chatId;
@@ -303,6 +304,7 @@ function resolveFeishuGroupSession(params: {
     groupSessionScope,
     replyInThread,
     threadReply,
+    topicScope,
   };
 }
 
@@ -1321,6 +1323,10 @@ export async function handleFeishuMessage(params: {
         InboundHistory: inboundHistory,
         ReplyToId: ctx.parentId,
         RootMessageId: ctx.rootId,
+        MessageThreadId: groupSession?.topicScope ?? ctx.rootId,
+        // Channel-specific reply target (om_ format) for outbound delivery into
+        // Feishu topics. topicScope uses omt_ which Feishu API rejects as reply target.
+        ReplyTargetId: groupSession?.topicScope ? (ctx.rootId ?? ctx.messageId) : undefined,
         RawBody: ctx.content,
         CommandBody: ctx.content,
         From: feishuFrom,

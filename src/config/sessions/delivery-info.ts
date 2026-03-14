@@ -28,13 +28,15 @@ export function parseSessionThreadInfo(sessionKey: string | undefined): {
 export function extractDeliveryInfo(sessionKey: string | undefined): {
   deliveryContext: { channel?: string; to?: string; accountId?: string } | undefined;
   threadId: string | undefined;
+  replyTargetId: string | undefined;
 } {
   const { baseSessionKey, threadId } = parseSessionThreadInfo(sessionKey);
   if (!sessionKey || !baseSessionKey) {
-    return { deliveryContext: undefined, threadId };
+    return { deliveryContext: undefined, threadId, replyTargetId: undefined };
   }
 
   let deliveryContext: { channel?: string; to?: string; accountId?: string } | undefined;
+  let replyTargetId: string | undefined;
   try {
     const cfg = loadConfig();
     const storePath = resolveStorePath(cfg.session?.store);
@@ -49,9 +51,13 @@ export function extractDeliveryInfo(sessionKey: string | undefined): {
         to: entry.deliveryContext.to,
         accountId: entry.deliveryContext.accountId,
       };
+      replyTargetId =
+        typeof entry.deliveryContext.replyTargetId === "string"
+          ? entry.deliveryContext.replyTargetId.trim() || undefined
+          : undefined;
     }
   } catch {
     // ignore: best-effort
   }
-  return { deliveryContext, threadId };
+  return { deliveryContext, threadId, replyTargetId };
 }
