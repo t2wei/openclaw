@@ -8,6 +8,13 @@ import {
   toolExecutionErrorResult,
   unknownToolActionResult,
 } from "./tool-result.js";
+import {
+  getFirstAuthorizedUser,
+  buildUserApiConfig,
+  getOAuthConfig,
+  userListDriveFiles,
+} from "./user-client.js";
+import type { UserApiConfig } from "./user-api.js";
 
 // ============ Actions ============
 
@@ -181,6 +188,17 @@ export function registerFeishuDriveTools(api: OpenClawPluginApi) {
     return;
   }
 
+  const firstAccount = accounts[0];
+  const oauthConfig = getOAuthConfig(firstAccount);
+
+  // Helper to get user API config (if user is authorized)
+  const getUserApiConfig = async (): Promise<UserApiConfig | null> => {
+    if (!oauthConfig) return null;
+    const openId = getFirstAuthorizedUser();
+    if (!openId) return null;
+    return buildUserApiConfig(firstAccount, openId);
+  };
+
   type FeishuDriveExecuteParams = FeishuDriveParams & { accountId?: string };
 
   api.registerTool(
@@ -194,7 +212,22 @@ export function registerFeishuDriveTools(api: OpenClawPluginApi) {
         parameters: FeishuDriveSchema,
         async execute(_toolCallId, params) {
           const p = params as FeishuDriveExecuteParams;
+
+          // Try to use user identity for list operations
+          const userApiConfig = await getUserApiConfig();
+
           try {
+            // For list operations, prefer user identity if available
+            if (userApiConfig && p.action === "list") {
+              try {
+                const result = await userListDriveFiles(userApiConfig, p.folder_token);
+                return jsonToolResult({ ...result, _mode: "user_identity" });
+              } catch (userErr) {
+                // Fall back to app identity if user identity fails
+                api.logger.debug?.(`feishu_drive: user identity failed, falling back to app: ${userErr}`);
+              }
+            }
+
             const client = createFeishuToolClient({
               api,
               executeParams: p,

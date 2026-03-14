@@ -2,11 +2,23 @@ import type * as Lark from "@larksuiteoapi/node-sdk";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk/feishu";
 import { listEnabledFeishuAccounts } from "./accounts.js";
 import { createFeishuToolClient, resolveAnyEnabledFeishuToolsConfig } from "./tool-account.js";
+import { generateAuthCard } from "./oauth.js";
 import {
   jsonToolResult,
   toolExecutionErrorResult,
   unknownToolActionResult,
 } from "./tool-result.js";
+import type { UserApiConfig } from "./user-api.js";
+import {
+  extractOpenIdFromSession,
+  buildUserApiConfig,
+  userListWikiSpaces,
+  userGetWikiNode,
+  userListWikiNodes,
+  isUserAuthorized,
+  getOAuthConfig,
+  getFirstAuthorizedUser,
+} from "./user-client.js";
 import { FeishuWikiSchema, type FeishuWikiParams } from "./wiki-schema.js";
 
 type ObjType = "doc" | "sheet" | "mindnote" | "bitable" | "file" | "docx" | "slides";
@@ -16,6 +28,9 @@ type ObjType = "doc" | "sheet" | "mindnote" | "bitable" | "file" | "docx" | "sli
 const WIKI_ACCESS_HINT =
   "To grant wiki access: Open wiki space → Settings → Members → Add the bot. " +
   "See: https://open.feishu.cn/document/server-docs/docs/wiki-v2/wiki-qa#a40ad4ca";
+
+const USER_AUTH_HINT =
+  "User authorization is available. Click the authorization link to access wikis with your identity.";
 
 async function listSpaces(client: Lark.Client) {
   const res = await client.wiki.space.list({});
@@ -169,6 +184,9 @@ export function registerFeishuWikiTools(api: OpenClawPluginApi) {
     return;
   }
 
+  const firstAccount = accounts[0];
+  const oauthConfig = getOAuthConfig(firstAccount);
+
   type FeishuWikiExecuteParams = FeishuWikiParams & { accountId?: string };
 
   api.registerTool(
@@ -182,15 +200,57 @@ export function registerFeishuWikiTools(api: OpenClawPluginApi) {
         parameters: FeishuWikiSchema,
         async execute(_toolCallId, params) {
           const p = params as FeishuWikiExecuteParams;
+
+          // Try to get user context, or fall back to first authorized user
+          let openId: string | null = null;
+          if (oauthConfig) {
+            openId = getFirstAuthorizedUser();
+          }
+
+          let userApiConfig: UserApiConfig | null = null;
+          if (openId && oauthConfig) {
+            userApiConfig = await buildUserApiConfig(firstAccount, openId);
+          }
+
           try {
+            // For read operations, prefer user identity if available
+            if (userApiConfig) {
+              switch (p.action) {
+                case "spaces":
+                  return jsonToolResult(await userListWikiSpaces(userApiConfig));
+                case "nodes":
+                  return jsonToolResult(
+                    await userListWikiNodes(userApiConfig, p.space_id, p.parent_node_token),
+                  );
+                case "get":
+                  return jsonToolResult(await userGetWikiNode(userApiConfig, p.token));
+              }
+            }
+
+            // Fall back to app identity or handle write operations
             const client = createFeishuToolClient({
               api,
               executeParams: p,
               defaultAccountId,
             });
             switch (p.action) {
-              case "spaces":
-                return jsonToolResult(await listSpaces(client));
+              case "spaces": {
+                const result = await listSpaces(client);
+                // If no spaces and OAuth is available, suggest user auth
+                if (
+                  result.spaces.length === 0 &&
+                  oauthConfig &&
+                  openId &&
+                  !isUserAuthorized(openId)
+                ) {
+                  return jsonToolResult({
+                    ...result,
+                    hint: USER_AUTH_HINT,
+                    authCard: generateAuthCard(oauthConfig, openId),
+                  });
+                }
+                return jsonToolResult(result);
+              }
               case "nodes":
                 return jsonToolResult(await listNodes(client, p.space_id, p.parent_node_token));
               case "get":

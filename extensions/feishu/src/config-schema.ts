@@ -118,6 +118,21 @@ const GroupSessionScopeSchema = z
   .optional();
 
 /**
+ * OAuth configuration for user_access_token support.
+ * When enabled, the bot can access documents/wikis with user's identity.
+ */
+const OAuthConfigSchema = z
+  .object({
+    enabled: z.boolean().optional(), // Enable OAuth (default: false)
+    redirectUri: z.string().url().optional(), // OAuth callback URL
+    scopes: z.array(z.string()).optional(), // Requested OAuth scopes
+    tokenStorePath: z.string().optional(), // Path to store user tokens
+    autoPrompt: z.boolean().optional(), // Auto-prompt for authorization when needed (default: true)
+  })
+  .strict()
+  .optional();
+
+/**
  * @deprecated Use groupSessionScope instead.
  *
  * Topic session isolation mode for group chats.
@@ -205,6 +220,7 @@ export const FeishuAccountConfigSchema = z
     ...FeishuSharedConfigShape,
     groupSessionScope: GroupSessionScopeSchema,
     topicSessionMode: TopicSessionModeSchema,
+    oauth: OAuthConfigSchema, // OAuth configuration for user_access_token
   })
   .strict();
 
@@ -227,6 +243,8 @@ export const FeishuConfigSchema = z
     requireMention: z.boolean().optional().default(true),
     groupSessionScope: GroupSessionScopeSchema,
     topicSessionMode: TopicSessionModeSchema,
+    // OAuth configuration for user_access_token
+    oauth: OAuthConfigSchema,
     // Dynamic agent creation for DM users
     dynamicAgentCreation: DynamicAgentCreationSchema,
     // Optimization flags
