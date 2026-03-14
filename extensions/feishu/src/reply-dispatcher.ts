@@ -143,6 +143,12 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
   let streaming: FeishuStreamingSession | null = null;
   let streamText = "";
   let lastPartial = "";
+  /** Accumulated history of intermediate steps for the collapsible panel.
+   *  What gets recorded is controlled by `historyPanelScope`:
+   *    - "tool" (default): only tool starts
+   *    - "all": tool starts + block narrations */
+  const historyEntries: string[] = [];
+  const historyPanelScope = account.config?.historyPanelScope ?? "tool";
   const deliveredFinalTexts = new Set<string>();
   let partialUpdateQueue: Promise<void> = Promise.resolve();
   let streamingStartPromise: Promise<void> | null = null;
@@ -216,7 +222,17 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
       if (mentionTargets?.length) {
         text = buildMentionedCardContent(mentionTargets, text);
       }
-      await streaming.close(text);
+      const hadIntermediateSteps = historyEntries.length > 0;
+      params.runtime.log?.(
+        `feishu[${account.accountId}] closeStreaming: addPanel=${hadIntermediateSteps}, historyEntries=${historyEntries.length}, scope=${historyPanelScope}`,
+      );
+      const historyText =
+        historyEntries.length > 0 ? historyEntries.join("\n\n---\n\n") : undefined;
+      await streaming.close(text, {
+        addFullTextPanel: hadIntermediateSteps,
+        historyText,
+        panelStyle: account.config?.historyPanel ?? undefined,
+      });
     }
     streaming = null;
     streamingStartPromise = null;
@@ -313,6 +329,9 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
 
           if (streaming?.isActive()) {
             if (info?.kind === "block") {
+              if (historyPanelScope === "all") {
+                historyEntries.push(text);
+              }
               // Some runtimes emit block payloads without onPartial/final callbacks.
               // Mirror block text into streamText so onIdle close still sends content.
               queueStreamingUpdate(text, { mode: "delta" });
@@ -380,6 +399,11 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
       ...replyOptions,
       onModelSelected: prefixContext.onModelSelected,
       disableBlockStreaming: true,
+      onToolStart: (payload: { name?: string; phase?: string }) => {
+        if (payload.phase === "start" && payload.name) {
+          historyEntries.push(`\`▶ ${payload.name}\``);
+        }
+      },
       onPartialReply: streamingEnabled
         ? (payload: ReplyPayload) => {
             if (!payload.text) {
