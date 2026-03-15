@@ -18,8 +18,8 @@ const SessionsCancelToolSchema = Type.Object({
  */
 export function createSessionsCancelTool(): AnyAgentTool {
   return {
-    label: "Sessions Cancel",
-    name: "sessions_cancel",
+    label: "ACP Cancel",
+    name: "acp_cancel",
     description:
       "Cancel the active turn of a spawned ACP session. This interrupts the current computation but keeps the session open for future messages. Use the sessionKey from sessions_spawn.",
     parameters: SessionsCancelToolSchema,
