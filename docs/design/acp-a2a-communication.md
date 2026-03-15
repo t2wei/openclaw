@@ -120,7 +120,7 @@ User → Main Agent
 | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | `src/agents/tools/sessions-send-core.ts`     | **New.** Extracted `resolveAndBuildSendParams()` shared by `sessions_send` and `acp_send`.                                       |
 | `src/agents/tools/acp-send-tool.ts`          | **New.** `acp_send` tool — fire-and-forget, no A2A flow.                                                                         |
-| `src/agents/tools/sessions-cancel-tool.ts`   | **New.** `sessions_cancel` tool — cancel the active turn of a spawned ACP session.                                               |
+| `src/agents/tools/sessions-cancel-tool.ts`   | **New.** `acp_cancel` tool — cancel the active turn of a spawned ACP session.                                                    |
 | `src/agents/tools/sessions-send-tool.ts`     | **Refactored.** Uses `resolveAndBuildSendParams()` from core. No behavior change.                                                |
 | `src/agents/openclaw-tools.ts`               | **Modified.** Registers `createAcpSendTool` and `createSessionsCancelTool`.                                                      |
 | `src/commands/agent.ts`                      | **Modified.** Callback uses `deliver: true` + explicit channel routing via `extractDeliveryInfo`. Moved before ACP early-return. |
@@ -138,4 +138,4 @@ User → Main Agent
 
 4. **`sourceTool: "acp_send"` / `"acp_callback"` provenance.** Both the send and callback paths set distinct `inputProvenance.sourceTool` values, enabling downstream logic to distinguish ACP-originated messages from general agent-to-agent traffic.
 
-5. **`sessions_cancel` for ACP turn interruption.** With the A2A model, the main agent is idle between ACP turns and needs the ability to interrupt a running ACP turn (e.g., cancel a runaway Codex session). The `sessions_cancel` tool calls the existing `acpManager.cancelSession()` via a new `sessions.cancel` gateway RPC. Cancel interrupts only the active turn — the session remains open for future messages. This is lighter than `sessions.reset` (which clears history) or `sessions.delete` (which removes the session entirely).
+5. **`acp_cancel` for ACP turn interruption.** With the A2A model, the main agent is idle between ACP turns and needs the ability to interrupt a running ACP turn (e.g., cancel a runaway Codex session). The `acp_cancel` tool calls the existing `acpManager.cancelSession()` via a new `sessions.cancel` gateway RPC. Cancel interrupts only the active turn — the session remains open for future messages. This is lighter than `sessions.reset` (which clears history) or `sessions.delete` (which removes the session entirely).
