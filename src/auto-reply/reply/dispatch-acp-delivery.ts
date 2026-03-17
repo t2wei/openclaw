@@ -158,6 +158,8 @@ export function createAcpDispatchDeliveryCoordinator(params: {
         sessionKey: params.ctx.SessionKey,
         accountId: params.ctx.AccountId,
         threadId: params.ctx.MessageThreadId,
+        replyTargetId:
+          params.ctx.ReplyTargetId != null ? String(params.ctx.ReplyTargetId) : undefined,
         cfg: params.cfg,
       });
       if (!result.ok) {

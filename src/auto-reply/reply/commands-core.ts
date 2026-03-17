@@ -87,6 +87,8 @@ export async function emitResetCommandHooks(params: {
         sessionKey: params.sessionKey,
         accountId: params.ctx.AccountId,
         threadId: params.ctx.MessageThreadId,
+        replyTargetId:
+          params.ctx.ReplyTargetId != null ? String(params.ctx.ReplyTargetId) : undefined,
         cfg: params.cfg,
       });
     }

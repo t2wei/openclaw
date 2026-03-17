@@ -40,6 +40,8 @@ export type FollowupRun = {
   originatingAccountId?: string;
   /** Thread id for reply routing (Telegram topic id or Matrix thread event id). */
   originatingThreadId?: string | number;
+  /** Channel-specific reply target id (e.g. Feishu om_ message id for topic replies). */
+  originatingReplyTargetId?: string;
   /** Chat type for context-aware threading (e.g., DM vs channel). */
   originatingChatType?: string;
   run: {
