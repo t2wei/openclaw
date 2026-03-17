@@ -678,6 +678,7 @@ export const OpenClawSchema = z
             trustedProxy: z
               .object({
                 userHeader: z.string().min(1, "userHeader is required for trusted-proxy mode"),
+                userClaimField: z.string().optional(),
                 requiredHeaders: z.array(z.string()).optional(),
                 allowUsers: z.array(z.string()).optional(),
               })
