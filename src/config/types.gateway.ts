@@ -131,8 +131,16 @@ export type GatewayTrustedProxyConfig = {
   /**
    * Header name containing the authenticated user identity (required).
    * Common values: "x-forwarded-user", "x-remote-user", "x-pomerium-claim-email"
+   *
+   * If the header value is a JWT (e.g. AWS ALB's x-amzn-oidc-data), the payload
+   * is automatically decoded and the user identity is extracted from `userClaimField`.
    */
   userHeader: string;
+  /**
+   * When userHeader contains a JWT, extract the user identity from this claim field.
+   * Defaults to "email". Only used when the header value is detected as a JWT.
+   */
+  userClaimField?: string;
   /**
    * Additional headers that MUST be present for the request to be trusted.
    * Use this to verify the request actually came through the proxy.
