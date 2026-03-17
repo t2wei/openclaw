@@ -43,6 +43,7 @@ import {
   type SessionsPreviewResult,
   readSessionMessages,
 } from "../session-utils.js";
+import { evaluateSessionVisibility, filterSessionsByPeerIds } from "../session-visibility.js";
 import { applySessionsPatchToStore } from "../sessions-patch.js";
 import { resolveSessionKeyFromResolveParams } from "../sessions-resolve.js";
 import type { GatewayClient, GatewayRequestHandlers, RespondFn } from "./types.js";
@@ -95,12 +96,28 @@ function rejectWebchatSessionMutation(params: {
 }
 
 export const sessionsHandlers: GatewayRequestHandlers = {
-  "sessions.list": ({ params, respond }) => {
+  "sessions.list": ({ params, respond, client }) => {
     if (!assertValidParams(params, validateSessionsListParams, "sessions.list", respond)) {
       return;
     }
     const p = params;
     const cfg = loadConfig();
+
+    // Session visibility filtering
+    const visibilityConfig = cfg.gateway?.controlUi?.sessionVisibility;
+    const visibilityDecision = evaluateSessionVisibility(visibilityConfig, {
+      authUser: client?.authUser,
+      authClaims: client?.authClaims,
+    });
+    if (visibilityDecision && !visibilityDecision.allowed) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "access denied: organization not allowed"),
+      );
+      return;
+    }
+
     const { storePath, store } = loadCombinedSessionStoreForGateway(cfg);
     const result = listSessionsFromStore({
       cfg,
@@ -108,6 +125,13 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       store,
       opts: p,
     });
+
+    // Apply peer-based filtering (admin bypass or no config = show all)
+    if (visibilityDecision && !visibilityDecision.isAdmin) {
+      result.sessions = filterSessionsByPeerIds(result.sessions, visibilityDecision.peerIds);
+      result.count = result.sessions.length;
+    }
+
     respond(true, result, undefined);
   },
   "sessions.preview": ({ params, respond }) => {
