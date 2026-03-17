@@ -51,6 +51,11 @@ export function buildThreadingToolContext(params: {
       currentChannelProvider: provider ?? (rawProvider as ChannelId),
       currentMessageId,
       hasRepliedRef,
+      // Preserve thread context for channels without a threading adapter (e.g. Feishu).
+      // MessageThreadId carries the topic/thread scope so the message tool targets
+      // the correct thread instead of falling back to the parent group.
+      currentThreadTs:
+        sessionCtx.MessageThreadId != null ? String(sessionCtx.MessageThreadId) : undefined,
     };
   }
   const context =

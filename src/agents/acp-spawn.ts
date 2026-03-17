@@ -706,7 +706,6 @@ export async function spawnAcpDirect(
         idempotencyKey: childIdem,
         deliver: useInlineDelivery,
         label: params.label || undefined,
-        spawnedBy: ctx.agentSessionKey || undefined,
       },
       timeoutMs: 10_000,
     });

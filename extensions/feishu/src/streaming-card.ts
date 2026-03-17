@@ -290,19 +290,24 @@ export class FeishuStreamingSession {
       .catch((error) => onError?.(error));
   }
 
-  async update(text: string): Promise<void> {
+  async update(text: string, options?: { replace?: boolean }): Promise<void> {
     if (!this.state || this.closed) {
       return;
     }
-    const mergedInput = mergeStreamingText(this.pendingText ?? this.state.currentText, text);
-    if (!mergedInput || mergedInput === this.state.currentText) {
+    // replace mode: set card content directly without merging with previous text.
+    // Used for narration blocks and final text where the new content should
+    // completely replace whatever is currently displayed.
+    const resolvedInput = options?.replace
+      ? text
+      : mergeStreamingText(this.pendingText ?? this.state.currentText, text);
+    if (!resolvedInput || resolvedInput === this.state.currentText) {
       return;
     }
 
     // Throttle: skip if updated recently, but remember pending text
     const now = Date.now();
     if (now - this.lastUpdateTime < this.updateThrottleMs) {
-      this.pendingText = mergedInput;
+      this.pendingText = resolvedInput;
       return;
     }
     this.pendingText = null;
@@ -312,12 +317,14 @@ export class FeishuStreamingSession {
       if (!this.state || this.closed) {
         return;
       }
-      const mergedText = mergeStreamingText(this.state.currentText, mergedInput);
-      if (!mergedText || mergedText === this.state.currentText) {
+      const finalContent = options?.replace
+        ? resolvedInput
+        : mergeStreamingText(this.state.currentText, resolvedInput);
+      if (!finalContent || finalContent === this.state.currentText) {
         return;
       }
-      this.state.currentText = mergedText;
-      await this.updateCardContent(mergedText, (e) => this.log?.(`Update failed: ${String(e)}`));
+      this.state.currentText = finalContent;
+      await this.updateCardContent(finalContent, (e) => this.log?.(`Update failed: ${String(e)}`));
     });
     await this.queue;
   }
@@ -340,8 +347,10 @@ export class FeishuStreamingSession {
     this.closed = true;
     await this.queue;
 
+    // When finalText is provided, use it directly — it is the definitive card
+    // content and should replace whatever was displayed during streaming.
     const pendingMerged = mergeStreamingText(this.state.currentText, this.pendingText ?? undefined);
-    const text = finalText ? mergeStreamingText(pendingMerged, finalText) : pendingMerged;
+    const text = finalText ?? pendingMerged;
     const apiBase = resolveApiBase(this.creds.domain);
 
     // Only send final update if content differs from what's already displayed
