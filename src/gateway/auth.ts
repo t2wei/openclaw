@@ -49,6 +49,8 @@ export type GatewayAuthResult = {
     | "bootstrap-token"
     | "trusted-proxy";
   user?: string;
+  /** Decoded JWT claims from trusted-proxy auth. Undefined for non-JWT auth. */
+  claims?: Record<string, unknown>;
   reason?: string;
   /** Present when the request was blocked by the rate limiter. */
   rateLimited?: boolean;
@@ -349,7 +351,7 @@ function authorizeTrustedProxy(params: {
   req?: IncomingMessage;
   trustedProxies?: string[];
   trustedProxyConfig: GatewayTrustedProxyConfig;
-}): { user: string } | { reason: string } {
+}): { user: string; claims?: Record<string, unknown> } | { reason: string } {
   const { req, trustedProxies, trustedProxyConfig } = params;
 
   if (!req) {
@@ -394,7 +396,7 @@ function authorizeTrustedProxy(params: {
     return { reason: "trusted_proxy_user_not_allowed" };
   }
 
-  return { user };
+  return { user, claims: jwtPayload };
 }
 
 function shouldAllowTailscaleHeaderAuth(authSurface: GatewayAuthSurface): boolean {
@@ -429,7 +431,7 @@ export async function authorizeGatewayConnect(
     });
 
     if ("user" in result) {
-      return { ok: true, method: "trusted-proxy", user: result.user };
+      return { ok: true, method: "trusted-proxy", user: result.user, claims: result.claims };
     }
     return { ok: false, reason: result.reason };
   }
