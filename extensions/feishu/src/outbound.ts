@@ -52,10 +52,17 @@ function resolveFeishuThreadParams(params: {
   if (replyToId) {
     return { replyToMessageId: replyToId };
   }
-  // threadId is the Feishu root_id (topic root message). Use message.reply +
-  // reply_in_thread to route into the topic thread.
+  // threadId is expected to be the Feishu root_id (topic root message, om_
+  // format).  Use message.reply + reply_in_thread to route into the topic
+  // thread.  Reject omt_ topic IDs — they are not valid open_message_ids and
+  // would cause a 400 from the Feishu API.
   if (params.threadId != null && String(params.threadId).trim()) {
-    return { replyToMessageId: String(params.threadId), replyInThread: true };
+    const tid = String(params.threadId).trim();
+    if (tid.startsWith("omt_")) {
+      // Topic ID, not a message ID — cannot be used as replyToMessageId.
+      return {};
+    }
+    return { replyToMessageId: tid, replyInThread: true };
   }
   return {};
 }

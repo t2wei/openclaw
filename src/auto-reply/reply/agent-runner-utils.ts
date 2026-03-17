@@ -52,10 +52,16 @@ export function buildThreadingToolContext(params: {
       currentMessageId,
       hasRepliedRef,
       // Preserve thread context for channels without a threading adapter (e.g. Feishu).
-      // MessageThreadId carries the topic/thread scope so the message tool targets
-      // the correct thread instead of falling back to the parent group.
+      // Prefer ReplyTargetId (om_ format message ID) over MessageThreadId (omt_ topic
+      // scope) because Feishu's reply API requires a valid open_message_id, not a
+      // topic ID.  For channels that don't set ReplyTargetId, fall back to
+      // MessageThreadId which may still be a valid reply target.
       currentThreadTs:
-        sessionCtx.MessageThreadId != null ? String(sessionCtx.MessageThreadId) : undefined,
+        sessionCtx.ReplyTargetId != null
+          ? String(sessionCtx.ReplyTargetId)
+          : sessionCtx.MessageThreadId != null
+            ? String(sessionCtx.MessageThreadId)
+            : undefined,
     };
   }
   const context =
