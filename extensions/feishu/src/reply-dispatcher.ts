@@ -290,9 +290,6 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
       humanDelay: core.channel.reply.resolveHumanDelayConfig(cfg, agentId),
       onReplyStart: () => {
         deliveredFinalTexts.clear();
-        if (streamingEnabled && renderMode === "card") {
-          startStreaming();
-        }
         void typingCallbacks.onReplyStart?.();
       },
       deliver: async (payload: ReplyPayload, info) => {
@@ -440,6 +437,12 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
         ? (payload: ReplyPayload) => {
             if (!payload.text) {
               return;
+            }
+            // Lazy card creation on first partial text (renderMode "card").
+            // For "auto" mode, card creation is deferred to deliver() where
+            // shouldUseCard() determines if card rendering is appropriate.
+            if (renderMode === "card") {
+              startStreaming();
             }
             queueStreamingUpdate(payload.text, {
               dedupeWithLastPartial: true,
