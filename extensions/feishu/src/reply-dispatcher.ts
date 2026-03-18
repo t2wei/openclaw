@@ -145,14 +145,14 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
   let streaming: FeishuStreamingSession | null = null;
   let streamText = "";
   let lastPartial = "";
-  let hadBlockReply = false;
-  let hadToolUse = false;
   /** Accumulated history of intermediate steps for the collapsible panel.
-   *  What gets recorded is controlled by `historyPanelScope`:
-   *    - "tool" (default): only tool starts
-   *    - "all": tool starts + block narrations */
+   *  Recorded via onToolStart (tool names) and onBlockNotify (narrations). */
   const historyEntries: string[] = [];
-  const historyPanelScope = account.config?.historyPanelScope ?? "tool";
+  /** True when the turn involved actual intermediate work (tool calls).
+   *  Used to decide whether to show the history panel — the panel is a
+   *  reliability fallback for Feishu topic rendering issues, so it should
+   *  only appear when there is meaningful multi-step content to back up. */
+  let hasToolActivity = false;
   const deliveredFinalTexts = new Set<string>();
   let partialUpdateQueue: Promise<void> = Promise.resolve();
   let streamingStartPromise: Promise<void> | null = null;
@@ -230,14 +230,19 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
       if (mentionTargets?.length) {
         text = buildMentionedCardContent(mentionTargets, text);
       }
-      const hadIntermediateSteps = historyEntries.length > 0;
+      // Show the history panel only when the turn involved tool calls (actual
+      // intermediate work). The panel is a reliability fallback for Feishu topic
+      // rendering: it records the full process including final text so users can
+      // review even if the streaming card renders incompletely.  For simple
+      // text-only replies the panel adds no value and should be hidden.
+      const shouldShowPanel = hasToolActivity;
       params.runtime.log?.(
-        `feishu[${account.accountId}] closeStreaming: addPanel=${hadIntermediateSteps}, historyEntries=${historyEntries.length}, scope=${historyPanelScope}`,
+        `feishu[${account.accountId}] closeStreaming: addPanel=${shouldShowPanel}, historyEntries=${historyEntries.length}, hasToolActivity=${hasToolActivity}`,
       );
       const historyText =
         historyEntries.length > 0 ? historyEntries.join("\n\n---\n\n") : undefined;
       await streaming.close(text, {
-        addFullTextPanel: hadIntermediateSteps,
+        addFullTextPanel: shouldShowPanel,
         historyText,
         panelStyle: account.config?.historyPanel ?? undefined,
       });
@@ -314,7 +319,6 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
           const useCard = renderMode === "card" || (renderMode === "auto" && shouldUseCard(text));
 
           if (info?.kind === "block") {
-            hadBlockReply = true;
             // Drop internal block chunks unless we can safely consume them as
             // streaming-card fallback content.
             if (!(streamingEnabled && useCard)) {
@@ -335,22 +339,27 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
 
           if (streaming?.isActive()) {
             if (info?.kind === "block") {
-              if (historyPanelScope === "all") {
-                historyEntries.push(text);
-              }
-              // Some runtimes emit block payloads without onPartial/final callbacks.
-              // Mirror block text into streamText so onIdle close still sends content.
-              queueStreamingUpdate(text, { mode: "delta" });
-            }
-            if (info?.kind === "final") {
-              // Replace card content with final text. Don't close here — there may be
-              // multiple final payloads; let onIdle close with the last one.
+              historyEntries.push(text);
+              // Narration: replace card content so each step overwrites the previous one.
+              // Users see the latest status, not a growing log of all narration.
               streamText = text;
               partialUpdateQueue = partialUpdateQueue.then(async () => {
                 if (streaming?.isActive()) {
-                  await streaming.update(streamText);
+                  await streaming.update(streamText, { replace: true });
                 }
               });
+            }
+            if (info?.kind === "final") {
+              // Replace card content with final text. Don't close here — there may be
+              // multiple final payloads (narration texts that weren't delivered as blocks
+              // due to disableBlockStreaming). Let onIdle close with the last one.
+              streamText = text;
+              partialUpdateQueue = partialUpdateQueue.then(async () => {
+                if (streaming?.isActive()) {
+                  await streaming.update(streamText, { replace: true });
+                }
+              });
+              deliveredFinalTexts.add(text);
             }
             // Send media even when streaming handled the text
             if (hasMedia) {
@@ -410,8 +419,8 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
       onModelSelected: prefixContext.onModelSelected,
       disableBlockStreaming: true,
       onToolStart: (payload: { name?: string; phase?: string; meta?: string }) => {
-        hadToolUse = true;
         if (payload.phase === "start" && payload.name) {
+          hasToolActivity = true;
           const label = payload.meta
             ? `▶ ${payload.name} ${payload.meta}`.slice(0, 80)
             : `▶ ${payload.name}`;
@@ -420,14 +429,15 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
       },
       onBlockNotify: (payload: { text?: string }) => {
         if (payload.text) {
-          hadBlockReply = true;
           historyEntries.push(payload.text);
           // Update streaming card to show the current narration step.
+          // Use replace mode — each block notification is a distinct step, not
+          // a continuation of the previous card content.
           if (streaming?.isActive()) {
             streamText = payload.text;
             partialUpdateQueue = partialUpdateQueue.then(async () => {
               if (streaming?.isActive()) {
-                await streaming.update(streamText);
+                await streaming.update(streamText, { replace: true });
               }
             });
           }
