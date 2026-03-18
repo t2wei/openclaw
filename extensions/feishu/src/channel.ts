@@ -302,7 +302,7 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount> = {
     normalizeTarget: (raw) => normalizeFeishuTarget(raw) ?? undefined,
     targetResolver: {
       looksLikeId: looksLikeFeishuId,
-      hint: "<chatId|user:openId|chat:chatId>",
+      hint: "<chatId(oc_)|user:openId(ou_)|chat:chatId|om_messageId for reply>. Note: omt_ (topic scope) is NOT a valid target.",
     },
   },
   directory: {
