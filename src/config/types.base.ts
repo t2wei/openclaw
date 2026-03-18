@@ -133,6 +133,11 @@ export type SessionConfig = {
   threadBindings?: SessionThreadBindingsConfig;
   /** Automatic session store maintenance (pruning, capping, file rotation). */
   maintenance?: SessionMaintenanceConfig;
+  /** Redis session mirror backend. */
+  redis?: {
+    url?: string;
+    keyPrefix?: string;
+  };
 };
 
 export type SessionMaintenanceMode = "enforce" | "warn";
