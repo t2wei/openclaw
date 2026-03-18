@@ -77,6 +77,10 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
 
   let typingState: TypingIndicatorState | null = null;
   const typingCallbacks = createTypingCallbacks({
+    // Feishu uses emoji reactions as typing indicators (no native typing API).
+    // Unlike Telegram/Discord, reactions are persistent and don't auto-expire,
+    // so keepalive re-sends are unnecessary and cause repeated notifications.
+    keepaliveIntervalMs: 0,
     start: async () => {
       // Check if typing indicator is enabled (default: true)
       if (!(account.config.typingIndicator ?? true)) {
@@ -136,13 +140,15 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
   const chunkMode = core.channel.text.resolveChunkMode(cfg, "feishu");
   const tableMode = core.channel.text.resolveMarkdownTableMode({ cfg, channel: "feishu" });
   const renderMode = account.config?.renderMode ?? "auto";
-  // Card streaming may miss thread affinity in topic contexts; use direct replies there.
-  const streamingEnabled =
-    !threadReplyMode && account.config?.streaming !== false && renderMode !== "raw";
+  const streamingEnabled = account.config?.streaming !== false && renderMode !== "raw";
 
   let streaming: FeishuStreamingSession | null = null;
   let streamText = "";
   let lastPartial = "";
+  let hadBlockReply = false;
+  let hadToolUse = false;
+  /** Accumulated history of intermediate steps (block narrations) for the collapsible panel. */
+  const historyEntries: string[] = [];
   const deliveredFinalTexts = new Set<string>();
   let partialUpdateQueue: Promise<void> = Promise.resolve();
   let streamingStartPromise: Promise<void> | null = null;
@@ -163,10 +169,14 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
     }
     if (options?.dedupeWithLastPartial) {
       lastPartial = nextText;
+      // Partial replies are cumulative — each payload contains the full text so far.
+      // Directly replace streamText to avoid the merge fallback appending duplicates.
+      streamText = nextText;
+    } else {
+      const mode = options?.mode ?? "snapshot";
+      streamText =
+        mode === "delta" ? `${streamText}${nextText}` : mergeStreamingText(streamText, nextText);
     }
-    const mode = options?.mode ?? "snapshot";
-    streamText =
-      mode === "delta" ? `${streamText}${nextText}` : mergeStreamingText(streamText, nextText);
     partialUpdateQueue = partialUpdateQueue.then(async () => {
       if (streamingStartPromise) {
         await streamingStartPromise;
@@ -216,7 +226,16 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
       if (mentionTargets?.length) {
         text = buildMentionedCardContent(mentionTargets, text);
       }
-      await streaming.close(text);
+      // Append a collapsed history panel when tool calls or block replies
+      // occurred — the panel shows accumulated intermediate steps so users
+      // can expand to see the full process log.
+      const hadIntermediateSteps = hadBlockReply || hadToolUse;
+      params.runtime.log?.(
+        `feishu[${account.accountId}] closeStreaming: hadBlockReply=${hadBlockReply}, hadToolUse=${hadToolUse}, addPanel=${hadIntermediateSteps}, historyEntries=${historyEntries.length}`,
+      );
+      const historyText =
+        historyEntries.length > 0 ? historyEntries.join("\n\n---\n\n") : undefined;
+      await streaming.close(text, { addFullTextPanel: hadIntermediateSteps, historyText });
     }
     streaming = null;
     streamingStartPromise = null;
@@ -293,6 +312,7 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
           const useCard = renderMode === "card" || (renderMode === "auto" && shouldUseCard(text));
 
           if (info?.kind === "block") {
+            hadBlockReply = true;
             // Drop internal block chunks unless we can safely consume them as
             // streaming-card fallback content.
             if (!(streamingEnabled && useCard)) {
@@ -313,14 +333,25 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
 
           if (streaming?.isActive()) {
             if (info?.kind === "block") {
-              // Some runtimes emit block payloads without onPartial/final callbacks.
-              // Mirror block text into streamText so onIdle close still sends content.
-              queueStreamingUpdate(text, { mode: "delta" });
+              // Narration: replace card content so each step overwrites the previous one.
+              // Users see the latest status, not a growing log of all narration.
+              historyEntries.push(text);
+              streamText = text;
+              partialUpdateQueue = partialUpdateQueue.then(async () => {
+                if (streaming?.isActive()) {
+                  await streaming.update(streamText);
+                }
+              });
             }
             if (info?.kind === "final") {
-              streamText = mergeStreamingText(streamText, text);
-              await closeStreaming();
-              deliveredFinalTexts.add(text);
+              // Replace card content with final text. Don't close here — there may be
+              // multiple final payloads; let onIdle close with the last one.
+              streamText = text;
+              partialUpdateQueue = partialUpdateQueue.then(async () => {
+                if (streaming?.isActive()) {
+                  await streaming.update(streamText);
+                }
+              });
             }
             // Send media even when streaming handled the text
             if (hasMedia) {
@@ -373,13 +404,36 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
         typingCallbacks.onCleanup?.();
       },
     });
-
   return {
     dispatcher,
     replyOptions: {
       ...replyOptions,
       onModelSelected: prefixContext.onModelSelected,
       disableBlockStreaming: true,
+      onToolStart: (payload: { name?: string; phase?: string; meta?: string }) => {
+        hadToolUse = true;
+        if (payload.phase === "start" && payload.name) {
+          const label = payload.meta
+            ? `▶ ${payload.name} ${payload.meta}`.slice(0, 80)
+            : `▶ ${payload.name}`;
+          historyEntries.push(`\`${label}\``);
+        }
+      },
+      onBlockNotify: (payload) => {
+        if (payload.text) {
+          hadBlockReply = true;
+          historyEntries.push(payload.text);
+          // Update streaming card to show the current narration step.
+          if (streaming?.isActive()) {
+            streamText = payload.text;
+            partialUpdateQueue = partialUpdateQueue.then(async () => {
+              if (streaming?.isActive()) {
+                await streaming.update(streamText);
+              }
+            });
+          }
+        }
+      },
       onPartialReply: streamingEnabled
         ? (payload: ReplyPayload) => {
             if (!payload.text) {
