@@ -313,10 +313,18 @@ export class AcpxRuntime implements AcpRuntime {
     }
 
     const acpxRecordId = ensuredEvent ? asOptionalString(ensuredEvent.acpxRecordId) : undefined;
-    const agentSessionId = ensuredEvent ? asOptionalString(ensuredEvent.agentSessionId) : undefined;
+    const rawAgentSessionId = ensuredEvent
+      ? asOptionalString(ensuredEvent.agentSessionId)
+      : undefined;
     const backendSessionId = ensuredEvent
       ? asOptionalString(ensuredEvent.acpxSessionId)
       : undefined;
+    // OXSCI PATCH: codex-acp returns the Codex thread ID as the ACP wire
+    // sessionId (acpxSessionId) but does not populate _meta.sessionId, so
+    // agentSessionId is always empty.  Fall back to backendSessionId which,
+    // for codex-acp, equals the Codex internal thread ID.
+    // Upstream fix requested: https://github.com/zed-industries/codex-acp/issues/181
+    const agentSessionId = rawAgentSessionId || backendSessionId;
 
     return {
       sessionKey: input.sessionKey,
@@ -491,7 +499,9 @@ export class AcpxRuntime implements AcpRuntime {
     const status = asTrimmedString(detail.status) || "unknown";
     const acpxRecordId = asOptionalString(detail.acpxRecordId);
     const acpxSessionId = asOptionalString(detail.acpxSessionId);
-    const agentSessionId = asOptionalString(detail.agentSessionId);
+    const rawAgentSessionId = asOptionalString(detail.agentSessionId);
+    // OXSCI PATCH: same fallback as ensureSession — see comment there.
+    const agentSessionId = rawAgentSessionId || acpxSessionId;
     const pid = typeof detail.pid === "number" && Number.isFinite(detail.pid) ? detail.pid : null;
     const summary = [
       `status=${status}`,
