@@ -42,6 +42,8 @@ export type RouteReplyParams = {
   accountId?: string;
   /** Thread id for replies (Telegram topic id or Matrix thread event id). */
   threadId?: string | number;
+  /** Channel-specific reply target id (e.g. Feishu om_ message id for topic replies). */
+  replyTargetId?: string;
   /** Config for provider-specific settings. */
   cfg: OpenClawConfig;
   /** Optional abort signal for cooperative cancellation. */
@@ -149,6 +151,10 @@ export async function routeReply(params: RouteReplyParams): Promise<RouteReplyRe
 
   const resolvedReplyToId =
     replyToId ??
+    // Channel-specific reply target (e.g. Feishu om_ message id for topic threads).
+    // This takes priority over threadId because some channels use non-replyable thread
+    // scopes (e.g. Feishu omt_ topic ids) that require a separate reply target.
+    (params.replyTargetId?.trim() || undefined) ??
     ((channelId === "slack" || channelId === "mattermost") && threadId != null && threadId !== ""
       ? String(threadId)
       : undefined);

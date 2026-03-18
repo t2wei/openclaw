@@ -102,6 +102,7 @@ export function createFollowupRunner(params: {
           sessionKey: queued.run.sessionKey,
           accountId: queued.originatingAccountId,
           threadId: queued.originatingThreadId,
+          replyTargetId: queued.originatingReplyTargetId,
           cfg: queued.run.config,
         });
         if (!result.ok) {

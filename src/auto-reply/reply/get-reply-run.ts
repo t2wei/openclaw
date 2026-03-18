@@ -120,6 +120,7 @@ async function sendResetSessionNotice(params: {
     sessionKey: params.sessionKey,
     accountId: params.accountId,
     threadId: params.threadId,
+    replyTargetId: params.ctx.ReplyTargetId != null ? String(params.ctx.ReplyTargetId) : undefined,
     cfg: params.cfg,
   });
 }
@@ -479,6 +480,7 @@ export async function runPreparedReply(
     originatingTo: ctx.OriginatingTo,
     originatingAccountId: ctx.AccountId,
     originatingThreadId: ctx.MessageThreadId,
+    originatingReplyTargetId: ctx.ReplyTargetId != null ? String(ctx.ReplyTargetId) : undefined,
     originatingChatType: ctx.ChatType,
     run: {
       agentId,
