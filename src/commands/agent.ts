@@ -4,6 +4,8 @@ import { getAcpSessionManager } from "../acp/control-plane/manager.js";
 import { resolveAcpAgentPolicyError, resolveAcpDispatchPolicyError } from "../acp/policy.js";
 import { toAcpRuntimeError } from "../acp/runtime/errors.js";
 import { resolveAcpSessionCwd } from "../acp/runtime/session-identifiers.js";
+import { callGateway } from "../gateway/call.js";
+import { generateSecureUuid } from "../infra/secure-random.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 
 const log = createSubsystemLogger("commands/agent");
@@ -23,7 +25,7 @@ import { getCliSessionId, setCliSessionId } from "../agents/cli-session.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../agents/defaults.js";
 import { FailoverError } from "../agents/failover-error.js";
 import { formatAgentInternalEventsForPrompt } from "../agents/internal-events.js";
-import { AGENT_LANE_SUBAGENT } from "../agents/lanes.js";
+import { AGENT_LANE_NESTED, AGENT_LANE_SUBAGENT } from "../agents/lanes.js";
 import { loadModelCatalog } from "../agents/model-catalog.js";
 import { runWithModelFallback } from "../agents/model-fallback.js";
 import {
@@ -70,6 +72,7 @@ import {
   setRuntimeConfigSnapshot,
 } from "../config/config.js";
 import {
+  extractDeliveryInfo,
   mergeSessionEntry,
   resolveAgentIdFromSessionKey,
   type SessionEntry,
@@ -862,6 +865,67 @@ async function agentCommandInternal(
           stopReason,
         },
       };
+
+      // A2A callback — inject ACP output into parent session.
+      // Must be here (before the ACP early-return) because the ACP code path
+      // returns from deliverAgentCommandResult below and never reaches the
+      // non-ACP callback site further down.
+      //
+      // Fires for ALL ACP turns (spawn + acp_send). The parent agent decides
+      // whether and how to relay the output to the user (may reply NO_REPLY).
+      //
+      // deliver: true — let the parent agent run deliver its reply to the
+      // external channel. Channel routing is explicitly passed from the parent
+      // session's delivery context so followup delivery routes correctly
+      // regardless of parent session entry mutations (race-safe).
+      if (!opts.deliver && sessionEntry?.spawnedBy && finalText) {
+        const parentKey = sessionEntry.spawnedBy;
+        const acpAgent = resolveAgentIdFromSessionKey(sessionKey);
+        const {
+          deliveryContext: parentDelivery,
+          threadId: parentThreadId,
+          replyTargetId: parentReplyTargetId,
+        } = extractDeliveryInfo(parentKey);
+        log.info?.(
+          `[A2A callback] session=${sessionKey} → parent=${parentKey} agent=${acpAgent} textLen=${finalText.length} channel=${parentDelivery?.channel ?? "unknown"}`,
+        );
+        void callGateway({
+          method: "agent",
+          params: {
+            message: finalText,
+            sessionKey: parentKey,
+            idempotencyKey: generateSecureUuid(),
+            deliver: true,
+            bestEffortDeliver: true,
+            channel: parentDelivery?.channel,
+            to: parentDelivery?.to,
+            threadId: parentThreadId,
+            replyTargetId: parentReplyTargetId,
+            accountId: parentDelivery?.accountId,
+            lane: AGENT_LANE_NESTED,
+            extraSystemPrompt: [
+              "ACP callback: the following is output from an ACP agent turn.",
+              `ACP agent: ${acpAgent}.`,
+              `ACP session: ${sessionKey}.`,
+              "Decide how to relay this to the user.",
+            ].join("\n"),
+            inputProvenance: {
+              kind: "inter_session",
+              sourceSessionKey: sessionKey,
+              sourceTool: "acp_callback",
+            },
+          },
+          timeoutMs: 15_000,
+        })
+          .then(() => {
+            log.info?.(`[A2A callback] sent OK → parent=${parentKey}`);
+          })
+          .catch((err) => {
+            log.warn?.(
+              `[A2A callback] FAILED → parent=${parentKey}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          });
+      }
 
       return await deliverAgentCommandResult({
         cfg,

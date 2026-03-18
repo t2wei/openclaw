@@ -442,12 +442,8 @@ export async function spawnAcpDirect(
     requestedMode: params.mode,
     threadRequested: requestThreadBinding,
   });
-  if (spawnMode === "session" && !requestThreadBinding) {
-    return {
-      status: "error",
-      error: 'mode="session" requires thread=true so the ACP session can stay bound to a thread.',
-    };
-  }
+  // OXSCI PATCH: removed upstream "session requires thread=true" guard
+  // to allow persistent A2A sessions (mode=session, thread=false).
 
   const bindingService = getSessionBindingService();
   const requesterParsedSession = parseAgentSessionKey(parentSessionKey);
@@ -669,7 +665,10 @@ export async function spawnAcpDirect(
   const inferredDeliveryTo = boundThreadId
     ? `channel:${boundThreadId}`
     : requesterOrigin?.to?.trim() || (deliveryThreadId ? `channel:${deliveryThreadId}` : undefined);
-  const hasDeliveryTarget = Boolean(requesterOrigin?.channel && inferredDeliveryTo);
+  // Only deliver to external channels for thread-bound (H2A) spawns.
+  // A2A spawns (thread=false) keep output internal via sessions_send.
+  const hasDeliveryTarget =
+    requestThreadBinding && Boolean(requesterOrigin?.channel && inferredDeliveryTo);
   // Fresh one-shot ACP runs should bootstrap the worker first, then let higher layers
   // decide how to relay status. Inline delivery is reserved for thread-bound sessions.
   const useInlineDelivery =

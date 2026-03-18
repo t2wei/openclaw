@@ -12,6 +12,7 @@ import { GATEWAY_CLIENT_IDS } from "../protocol/client-info.js";
 import {
   ErrorCodes,
   errorShape,
+  validateSessionsCancelParams,
   validateSessionsCompactParams,
   validateSessionsDeleteParams,
   validateSessionsListParams,
@@ -248,6 +249,37 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       return;
     }
     respond(true, { ok: true, key: result.key, entry: result.entry }, undefined);
+  },
+  "sessions.cancel": async ({ params, respond }) => {
+    if (!assertValidParams(params, validateSessionsCancelParams, "sessions.cancel", respond)) {
+      return;
+    }
+    const p = params;
+    const key = requireSessionKey(p.key, respond);
+    if (!key) {
+      return;
+    }
+
+    const { getAcpSessionManager } = await import("../../acp/control-plane/manager.js");
+    const acpManager = getAcpSessionManager();
+    const cfg = loadConfig();
+    try {
+      await acpManager.cancelSession({
+        cfg,
+        sessionKey: key,
+        reason: typeof p.reason === "string" ? p.reason : "sessions.cancel",
+      });
+      respond(true, { ok: true, key }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.UNAVAILABLE,
+          `cancel failed: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
+    }
   },
   "sessions.delete": async ({ params, respond, client, isWebchatConnect }) => {
     if (!assertValidParams(params, validateSessionsDeleteParams, "sessions.delete", respond)) {
