@@ -35,6 +35,7 @@ import {
   parseComponentsParam,
   readBooleanParam,
   resolveAttachmentMediaPolicy,
+  resolveFeishuAutoThreadId,
   resolveSlackAutoThreadId,
   resolveTelegramAutoThreadId,
 } from "./message-action-params.js";
@@ -78,18 +79,27 @@ function resolveAndApplyOutboundThreadId(
     ctx.channel === "telegram" && !threadId
       ? resolveTelegramAutoThreadId({ to: ctx.to, toolContext: ctx.toolContext })
       : undefined;
-  // Generic fallback for channels without dedicated auto-threading (e.g. Discord,
-  // Feishu plugin channels).  If the tool context carries a thread ID and the agent
-  // didn't explicitly specify one, inject it so the message lands in the correct
-  // thread/topic instead of the parent group.
+  const feishuAutoThreadId =
+    ctx.channel === "feishu" && !threadId
+      ? resolveFeishuAutoThreadId({ to: ctx.to, toolContext: ctx.toolContext })
+      : undefined;
+  // Generic fallback for channels without dedicated auto-threading (e.g. Discord).
+  // If the tool context carries a thread ID and the agent didn't explicitly specify
+  // one, inject it so the message lands in the correct thread instead of the parent.
   const genericAutoThreadId =
     !threadId &&
     ctx.channel !== "slack" &&
     ctx.channel !== "telegram" &&
+    ctx.channel !== "feishu" &&
     ctx.toolContext?.currentThreadTs
       ? ctx.toolContext.currentThreadTs
       : undefined;
-  const resolved = threadId ?? slackAutoThreadId ?? telegramAutoThreadId ?? genericAutoThreadId;
+  const resolved =
+    threadId ??
+    slackAutoThreadId ??
+    telegramAutoThreadId ??
+    feishuAutoThreadId ??
+    genericAutoThreadId;
   // Write auto-resolved threadId back into params so downstream dispatch
   // (plugin `readStringParam(params, "threadId")`) picks it up.
   if (resolved && !params.threadId) {

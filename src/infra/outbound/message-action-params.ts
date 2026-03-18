@@ -71,6 +71,34 @@ export function resolveTelegramAutoThreadId(params: {
   return context.currentThreadTs;
 }
 
+/**
+ * Auto-resolve Feishu threading when the message tool targets the session's
+ * originating chat.  Parallel to resolveSlackAutoThreadId / resolveTelegramAutoThreadId.
+ *
+ * Feishu topics use omt_ scope IDs for session routing but require om_ message
+ * IDs for the reply API.  This resolver consumes replyTargetId (om_) when
+ * available and rejects omt_ threadIds that would cause a 400 from Feishu API.
+ */
+export function resolveFeishuAutoThreadId(params: {
+  to: string;
+  toolContext?: ChannelThreadingToolContext;
+}): string | undefined {
+  const context = params.toolContext;
+  if (!context) {
+    return undefined;
+  }
+  // Prefer replyTargetId (om_ format, API-ready) over messageThreadId
+  if (context.replyTargetId) {
+    return context.replyTargetId;
+  }
+  // Reject omt_ topic scope IDs — not valid for Feishu reply API
+  const threadId = context.messageThreadId ?? context.currentThreadTs;
+  if (threadId && threadId.startsWith("omt_")) {
+    return undefined;
+  }
+  return threadId ?? undefined;
+}
+
 function resolveAttachmentMaxBytes(params: {
   cfg: OpenClawConfig;
   channel: ChannelId;
