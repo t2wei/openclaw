@@ -72,13 +72,20 @@ export function scheduleFollowupDrain(
   key: string,
   runFollowup: (run: FollowupRun) => Promise<void>,
 ): void {
+  // Always cache the callback so kickFollowupDrainIfIdle can restart a drain
+  // when a message is enqueued while a run is active (e.g. user message during
+  // ACP callback loop).  Upstream b645654923 moved this below beginQueueDrain
+  // to avoid stale callbacks, but that prevents kickFollowupDrainIfIdle from
+  // ever starting a drain when the initial finalizeWithFollowup call found an
+  // empty queue — stranding messages permanently.  The staleness concern is
+  // benign: the callback wraps runEmbeddedPiAgent and most parameters come
+  // from the FollowupRun item, not the closure.
+  // Ref: upstream 60130203e1 (original fix) → b645654923 (regression).
+  FOLLOWUP_RUN_CALLBACKS.set(key, runFollowup);
   const queue = beginQueueDrain(FOLLOWUP_QUEUES, key);
   if (!queue) {
     return;
   }
-  // Cache callback only when a drain actually starts. Avoid keeping stale
-  // callbacks around from finalize calls where no queue work is pending.
-  FOLLOWUP_RUN_CALLBACKS.set(key, runFollowup);
   void (async () => {
     try {
       const collectState = { forceIndividualCollect: false };
