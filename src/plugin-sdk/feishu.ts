@@ -31,6 +31,13 @@ export type {
   ChannelGroupContext,
   ChannelMeta,
   ChannelOutboundAdapter,
+  ChannelOutboundDispatcherAdapter,
+  ChannelReplyDispatcherAdapter,
+  ChannelReplyDispatcherContext,
+  ChannelReplyDispatcherResult,
+  OutboundDispatcherContext,
+  OutboundDispatcherPayload,
+  OutboundDispatcherSession,
 } from "../channels/plugins/types.js";
 export type { ChannelPlugin } from "../channels/plugins/types.plugin.js";
 export { createReplyPrefixContext } from "../channels/reply-prefix.js";
