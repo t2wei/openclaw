@@ -70,6 +70,9 @@ export function createBlockReplyDeliveryHandler(params: {
   blockStreamingEnabled: boolean;
   blockReplyPipeline: BlockReplyPipeline | null;
   directlySentBlockKeys: Set<string>;
+  /** Notification-only callback invoked when block streaming is disabled.
+   * Does not affect didStream or final payload suppression. */
+  onBlockNotify?: (payload: ReplyPayload) => void;
 }): (payload: ReplyPayload) => Promise<void> {
   return async (payload) => {
     const { text, skip } = params.normalizeStreamingText(payload);
@@ -130,6 +133,10 @@ export function createBlockReplyDeliveryHandler(params: {
       // Track sent key to avoid duplicate in final payloads.
       params.directlySentBlockKeys.add(createBlockReplyContentKey(blockPayload));
       await params.onBlockReply(blockPayload);
+    } else if (params.onBlockNotify) {
+      // When block streaming is disabled, notify the caller about the block payload
+      // without affecting didStream or final payload suppression.
+      params.onBlockNotify(blockPayload);
     }
     // When streaming is disabled entirely, blocks are accumulated in final text instead.
   };
