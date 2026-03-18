@@ -52,6 +52,7 @@ const HistoryPanelSchema = z
     headerBackgroundColor: z.string().optional(),
     borderColor: z.string().optional(),
   })
+  .strict()
   .optional();
 
 const BlockStreamingCoalesceSchema = z
@@ -179,6 +180,7 @@ const FeishuSharedConfigShape = {
   renderMode: RenderModeSchema,
   streaming: StreamingModeSchema,
   historyPanel: HistoryPanelSchema,
+  historyPanelScope: z.enum(["tool", "all"]).optional(),
   tools: FeishuToolsConfigSchema,
   replyInThread: ReplyInThreadSchema,
   reactionNotifications: ReactionNotificationModeSchema,

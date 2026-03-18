@@ -3,7 +3,12 @@ import {
   formatAllowFromLowercase,
   mapAllowFromEntries,
 } from "openclaw/plugin-sdk/compat";
-import type { ChannelMeta, ChannelPlugin, ClawdbotConfig } from "openclaw/plugin-sdk/feishu";
+import type {
+  ChannelMeta,
+  ChannelPlugin,
+  ChannelReplyDispatcherContext,
+  ClawdbotConfig,
+} from "openclaw/plugin-sdk/feishu";
 import {
   buildProbeChannelStatusSummary,
   buildRuntimeAccountStatusSnapshot,
@@ -27,6 +32,7 @@ import { feishuOnboardingAdapter } from "./onboarding.js";
 import { feishuOutbound } from "./outbound.js";
 import { resolveFeishuGroupToolPolicy } from "./policy.js";
 import { probeFeishu } from "./probe.js";
+import { createFeishuReplyDispatcher } from "./reply-dispatcher.js";
 import { sendMessageFeishu } from "./send.js";
 import { normalizeFeishuTarget, looksLikeFeishuId, formatFeishuTarget } from "./targets.js";
 import type { ResolvedFeishuAccount, FeishuConfig } from "./types.js";
@@ -331,6 +337,28 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount> = {
       }),
   },
   outbound: feishuOutbound,
+  replyDispatcher: {
+    createReplyDispatcher: (ctx: ChannelReplyDispatcherContext) => {
+      const threadId = ctx.threadId != null ? String(ctx.threadId).trim() : undefined;
+      // Feishu reply API only accepts om_ (message_id) format.
+      // replyTargetId carries a valid om_ ID from the session's delivery context;
+      // threadId may be omt_ (topic routing) which Feishu API rejects.
+      const replyToMessageId =
+        ctx.replyTargetId?.trim() || (threadId?.startsWith("omt_") ? undefined : threadId);
+      // ctx.chatId may include a prefix (e.g. "chat:oc_xxx") from delivery context;
+      // Feishu API needs the raw ID.
+      const chatId = normalizeFeishuTarget(ctx.chatId) ?? ctx.chatId;
+      return createFeishuReplyDispatcher({
+        cfg: ctx.cfg,
+        agentId: ctx.agentId,
+        runtime: ctx.runtime,
+        chatId,
+        replyToMessageId,
+        replyInThread: threadId ? true : undefined,
+        accountId: ctx.accountId,
+      });
+    },
+  },
   status: {
     defaultRuntime: createDefaultChannelRuntimeState(DEFAULT_ACCOUNT_ID, { port: null }),
     buildChannelSummary: ({ snapshot }) =>

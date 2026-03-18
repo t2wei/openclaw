@@ -147,8 +147,12 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
   let lastPartial = "";
   let hadBlockReply = false;
   let hadToolUse = false;
-  /** Accumulated history of intermediate steps (block narrations) for the collapsible panel. */
+  /** Accumulated history of intermediate steps for the collapsible panel.
+   *  What gets recorded is controlled by `historyPanelScope`:
+   *    - "tool" (default): only tool starts
+   *    - "all": tool starts + block narrations */
   const historyEntries: string[] = [];
+  const historyPanelScope = account.config?.historyPanelScope ?? "tool";
   const deliveredFinalTexts = new Set<string>();
   let partialUpdateQueue: Promise<void> = Promise.resolve();
   let streamingStartPromise: Promise<void> | null = null;
@@ -226,12 +230,9 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
       if (mentionTargets?.length) {
         text = buildMentionedCardContent(mentionTargets, text);
       }
-      // Append a collapsed history panel when tool calls or block replies
-      // occurred — the panel shows accumulated intermediate steps so users
-      // can expand to see the full process log.
-      const hadIntermediateSteps = hadBlockReply || hadToolUse;
+      const hadIntermediateSteps = historyEntries.length > 0;
       params.runtime.log?.(
-        `feishu[${account.accountId}] closeStreaming: hadBlockReply=${hadBlockReply}, hadToolUse=${hadToolUse}, addPanel=${hadIntermediateSteps}, historyEntries=${historyEntries.length}`,
+        `feishu[${account.accountId}] closeStreaming: addPanel=${hadIntermediateSteps}, historyEntries=${historyEntries.length}, scope=${historyPanelScope}`,
       );
       const historyText =
         historyEntries.length > 0 ? historyEntries.join("\n\n---\n\n") : undefined;
@@ -337,15 +338,12 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
 
           if (streaming?.isActive()) {
             if (info?.kind === "block") {
-              // Narration: replace card content so each step overwrites the previous one.
-              // Users see the latest status, not a growing log of all narration.
-              historyEntries.push(text);
-              streamText = text;
-              partialUpdateQueue = partialUpdateQueue.then(async () => {
-                if (streaming?.isActive()) {
-                  await streaming.update(streamText);
-                }
-              });
+              if (historyPanelScope === "all") {
+                historyEntries.push(text);
+              }
+              // Some runtimes emit block payloads without onPartial/final callbacks.
+              // Mirror block text into streamText so onIdle close still sends content.
+              queueStreamingUpdate(text, { mode: "delta" });
             }
             if (info?.kind === "final") {
               // Replace card content with final text. Don't close here — there may be
