@@ -49,6 +49,8 @@ export type GatewayAuthResult = {
     | "bootstrap-token"
     | "trusted-proxy";
   user?: string;
+  /** Decoded JWT claims from trusted-proxy auth. Undefined for non-JWT auth. */
+  claims?: Record<string, unknown>;
   reason?: string;
   /** Present when the request was blocked by the rate limiter. */
   rateLimited?: boolean;
@@ -320,14 +322,36 @@ export function assertGatewayAuthConfigured(
 }
 
 /**
+ * Try to decode a JWT payload (base64url-encoded middle segment) without
+ * verifying the signature.  Returns the parsed claims object on success,
+ * or `undefined` when the value does not look like a JWT.
+ */
+function tryDecodeJwtPayload(value: string): Record<string, unknown> | undefined {
+  const parts = value.split(".");
+  if (parts.length !== 3) {
+    return undefined;
+  }
+  try {
+    const payload = Buffer.from(parts[1], "base64url").toString("utf-8");
+    return JSON.parse(payload) as Record<string, unknown>;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Check if the request came from a trusted proxy and extract user identity.
  * Returns the user identity if valid, or null with a reason if not.
+ *
+ * When the userHeader value is a JWT (e.g. AWS ALB's `x-amzn-oidc-data`),
+ * the payload is decoded and the user identity is extracted from the claim
+ * specified by `trustedProxyConfig.userClaimField` (default: `"email"`).
  */
 function authorizeTrustedProxy(params: {
   req?: IncomingMessage;
   trustedProxies?: string[];
   trustedProxyConfig: GatewayTrustedProxyConfig;
-}): { user: string } | { reason: string } {
+}): { user: string; claims?: Record<string, unknown> } | { reason: string } {
   const { req, trustedProxies, trustedProxyConfig } = params;
 
   if (!req) {
@@ -352,14 +376,27 @@ function authorizeTrustedProxy(params: {
     return { reason: "trusted_proxy_user_missing" };
   }
 
-  const user = userHeaderValue.trim();
+  // If the header value looks like a JWT, decode the payload and extract the
+  // configured claim field (default: "email").
+  let user: string;
+  const jwtPayload = tryDecodeJwtPayload(userHeaderValue.trim());
+  if (jwtPayload) {
+    const claimField = trustedProxyConfig.userClaimField ?? "email";
+    const claimValue = jwtPayload[claimField];
+    if (typeof claimValue !== "string" || claimValue.trim() === "") {
+      return { reason: `trusted_proxy_jwt_claim_missing_${claimField}` };
+    }
+    user = claimValue.trim();
+  } else {
+    user = userHeaderValue.trim();
+  }
 
   const allowUsers = trustedProxyConfig.allowUsers ?? [];
   if (allowUsers.length > 0 && !allowUsers.includes(user)) {
     return { reason: "trusted_proxy_user_not_allowed" };
   }
 
-  return { user };
+  return { user, claims: jwtPayload };
 }
 
 function shouldAllowTailscaleHeaderAuth(authSurface: GatewayAuthSurface): boolean {
@@ -394,7 +431,7 @@ export async function authorizeGatewayConnect(
     });
 
     if ("user" in result) {
-      return { ok: true, method: "trusted-proxy", user: result.user };
+      return { ok: true, method: "trusted-proxy", user: result.user, claims: result.claims };
     }
     return { ok: false, reason: result.reason };
   }

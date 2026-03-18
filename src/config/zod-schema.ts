@@ -650,6 +650,23 @@ export const OpenClawSchema = z
             dangerouslyAllowHostHeaderOriginFallback: z.boolean().optional(),
             allowInsecureAuth: z.boolean().optional(),
             dangerouslyDisableDeviceAuth: z.boolean().optional(),
+            sessionVisibility: z
+              .object({
+                claims: z
+                  .object({
+                    sub: z.string().optional(),
+                    role: z.string().optional(),
+                    orgId: z.string().optional(),
+                  })
+                  .strict()
+                  .optional(),
+                allowedOrgs: z.array(z.string()).optional(),
+                adminRoles: z.array(z.string()).optional(),
+                userPeers: z.record(z.string(), z.array(z.string())).optional(),
+                unmappedPolicy: z.union([z.literal("none"), z.literal("all")]).optional(),
+              })
+              .strict()
+              .optional(),
           })
           .strict()
           .optional(),
@@ -678,6 +695,7 @@ export const OpenClawSchema = z
             trustedProxy: z
               .object({
                 userHeader: z.string().min(1, "userHeader is required for trusted-proxy mode"),
+                userClaimField: z.string().optional(),
                 requiredHeaders: z.array(z.string()).optional(),
                 allowUsers: z.array(z.string()).optional(),
               })

@@ -96,6 +96,37 @@ export type TalkConfigResponse = TalkConfig & {
   resolved?: ResolvedTalkConfig;
 };
 
+/**
+ * Mapping from logical claim names to auth claim field names.
+ * Used by session visibility to extract role/org from authClaims.
+ */
+export type SessionVisibilityClaimsMapping = {
+  /** Claim field for user subject identity (e.g. "sub"). */
+  sub?: string;
+  /** Claim field for user role (e.g. "role"). */
+  role?: string;
+  /** Claim field for organization ID (e.g. "org_id"). */
+  orgId?: string;
+};
+
+/**
+ * Config-driven session visibility filtering for Control UI.
+ * When configured, restricts which sessions each user can see.
+ * Works with any auth method that populates authUser/authClaims on the client.
+ */
+export type SessionVisibilityConfig = {
+  /** Mapping from logical names to auth claim field names. */
+  claims?: SessionVisibilityClaimsMapping;
+  /** Only users whose orgId claim matches one of these values can access sessions. */
+  allowedOrgs?: string[];
+  /** Role values that grant full session visibility (admin bypass). */
+  adminRoles?: string[];
+  /** Static mapping from user identity (e.g. email) to session peer IDs. */
+  userPeers?: Record<string, string[]>;
+  /** Policy for users not in userPeers: "none" (default) or "all". */
+  unmappedPolicy?: "none" | "all";
+};
+
 export type GatewayControlUiConfig = {
   /** If false, the Gateway will not serve the Control UI (default /). */
   enabled?: boolean;
@@ -118,6 +149,8 @@ export type GatewayControlUiConfig = {
   allowInsecureAuth?: boolean;
   /** DANGEROUS: Disable device identity checks for the Control UI (default: false). */
   dangerouslyDisableDeviceAuth?: boolean;
+  /** Config-driven session visibility filtering. */
+  sessionVisibility?: SessionVisibilityConfig;
 };
 
 export type GatewayAuthMode = "none" | "token" | "password" | "trusted-proxy";
@@ -131,8 +164,16 @@ export type GatewayTrustedProxyConfig = {
   /**
    * Header name containing the authenticated user identity (required).
    * Common values: "x-forwarded-user", "x-remote-user", "x-pomerium-claim-email"
+   *
+   * If the header value is a JWT (e.g. AWS ALB's x-amzn-oidc-data), the payload
+   * is automatically decoded and the user identity is extracted from `userClaimField`.
    */
   userHeader: string;
+  /**
+   * When userHeader contains a JWT, extract the user identity from this claim field.
+   * Defaults to "email". Only used when the header value is detected as a JWT.
+   */
+  userClaimField?: string;
   /**
    * Additional headers that MUST be present for the request to be trusted.
    * Use this to verify the request actually came through the proxy.
