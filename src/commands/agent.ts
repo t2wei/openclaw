@@ -58,6 +58,8 @@ import {
   isSilentReplyText,
   SILENT_REPLY_TOKEN,
 } from "../auto-reply/tokens.js";
+import { getChannelPlugin, normalizeChannelId } from "../channels/plugins/index.js";
+import type { ChannelReplyDispatcherResult } from "../channels/plugins/types.adapters.js";
 import { formatCliCommand } from "../cli/command-format.js";
 import { resolveCommandSecretRefsViaGateway } from "../cli/command-secret-gateway.js";
 import { getAgentRuntimeCommandSecretTargetIds } from "../cli/command-secret-targets.js";
@@ -344,6 +346,14 @@ function runAgentAttempt(params: {
   sessionStore?: Record<string, SessionEntry>;
   storePath?: string;
   allowTransientCooldownProbe?: boolean;
+  outboundStreamingCallbacks?: {
+    onPartialReply: (payload: { text?: string; mediaUrls?: string[] }) => void | Promise<void>;
+    onBlockReply: (payload: {
+      text?: string;
+      mediaUrl?: string;
+      mediaUrls?: string[];
+    }) => void | Promise<void>;
+  };
 }) {
   const effectivePrompt = resolveFallbackRetryPrompt({
     body: params.body,
@@ -464,6 +474,7 @@ function runAgentAttempt(params: {
     agentAccountId: params.runContext.accountId,
     messageTo: params.opts.replyTo ?? params.opts.to,
     messageThreadId: params.opts.threadId,
+    replyTargetId: params.opts.replyTargetId,
     groupId: params.runContext.groupId,
     groupChannel: params.runContext.groupChannel,
     groupSpace: params.runContext.groupSpace,
@@ -496,6 +507,8 @@ function runAgentAttempt(params: {
     agentDir: params.agentDir,
     allowTransientCooldownProbe: params.allowTransientCooldownProbe,
     onAgentEvent: params.onAgentEvent,
+    onPartialReply: params.outboundStreamingCallbacks?.onPartialReply,
+    onBlockReply: params.outboundStreamingCallbacks?.onBlockReply,
     bootstrapPromptWarningSignaturesSeen,
     bootstrapPromptWarningSignature,
   });
@@ -1076,6 +1089,31 @@ async function agentCommandInternal(
       sessionEntry = resolvedSessionFile.sessionEntry;
     }
 
+    // --- Channel reply dispatcher: create for deliver-to-channel flows ---
+    let channelDispatch: ChannelReplyDispatcherResult | null = null;
+    if (opts.deliver === true && opts.channel && opts.to) {
+      const ch = normalizeChannelId(opts.channel) ?? opts.channel;
+      const plugin = getChannelPlugin(ch);
+      if (plugin?.replyDispatcher) {
+        try {
+          channelDispatch =
+            plugin.replyDispatcher.createReplyDispatcher({
+              cfg,
+              agentId: sessionAgentId,
+              runtime,
+              chatId: opts.to,
+              threadId: opts.threadId,
+              replyTargetId: opts.replyTargetId,
+              accountId: opts.accountId,
+            }) ?? null;
+        } catch (err) {
+          log.warn?.(
+            `[channel-reply-dispatcher] create failed, falling back to default delivery: ${String(err)}`,
+          );
+        }
+      }
+    }
+
     const startedAt = Date.now();
     let lifecycleEnded = false;
 
@@ -1145,7 +1183,27 @@ async function agentCommandInternal(
               ) {
                 lifecycleEnded = true;
               }
+              // Forward tool start events to channel dispatcher (for streaming card history panel).
+              if (
+                channelDispatch &&
+                evt.stream === "tool" &&
+                typeof evt.data?.phase === "string" &&
+                evt.data.phase === "start"
+              ) {
+                void channelDispatch.replyOptions.onToolStart?.({
+                  name: typeof evt.data.name === "string" ? evt.data.name : undefined,
+                  phase: evt.data.phase,
+                });
+              }
             },
+            outboundStreamingCallbacks: channelDispatch
+              ? {
+                  onPartialReply: (p) => channelDispatch.replyOptions.onPartialReply?.(p),
+                  onBlockReply: (p) => {
+                    channelDispatch.dispatcher.sendBlockReply(p);
+                  },
+                }
+              : undefined,
           });
         },
       });
@@ -1182,6 +1240,15 @@ async function agentCommandInternal(
           },
         });
       }
+      // Clean up channel dispatcher on error.
+      if (channelDispatch) {
+        try {
+          channelDispatch.dispatcher.markComplete();
+          await channelDispatch.dispatcher.waitForIdle();
+        } finally {
+          channelDispatch.markDispatchIdle();
+        }
+      }
       throw err;
     }
 
@@ -1203,6 +1270,26 @@ async function agentCommandInternal(
     }
 
     const payloads = result.payloads ?? [];
+
+    // --- Channel reply dispatcher: send final payloads and close ---
+    if (channelDispatch) {
+      try {
+        for (const p of payloads) {
+          channelDispatch.dispatcher.sendFinalReply(p);
+        }
+        channelDispatch.dispatcher.markComplete();
+        await channelDispatch.dispatcher.waitForIdle();
+        channelDispatch.markDispatchIdle();
+        // Suppress default deliverOutboundPayloads — reply dispatcher already delivered.
+        opts.deliver = false;
+      } catch (err) {
+        log.warn?.(
+          `[channel-reply-dispatcher] close failed, falling back to default delivery: ${String(err)}`,
+        );
+        // Don't modify opts.deliver — let default path handle it.
+      }
+    }
+
     return await deliverAgentCommandResult({
       cfg,
       deps,

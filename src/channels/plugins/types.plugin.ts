@@ -10,6 +10,8 @@ import type {
   ChannelGroupAdapter,
   ChannelHeartbeatAdapter,
   ChannelOutboundAdapter,
+  ChannelOutboundDispatcherAdapter,
+  ChannelReplyDispatcherAdapter,
   ChannelPairingAdapter,
   ChannelSecurityAdapter,
   ChannelSetupAdapter,
@@ -66,6 +68,11 @@ export type ChannelPlugin<ResolvedAccount = any, Probe = unknown, Audit = unknow
   groups?: ChannelGroupAdapter;
   mentions?: ChannelMentionAdapter;
   outbound?: ChannelOutboundAdapter;
+  /** Creates a ReplyDispatcher for outbound agent-to-channel delivery (e.g. ACP callback → channel).
+   * When present, framework uses this instead of outboundDispatcher for deliver-to-channel flows. */
+  replyDispatcher?: ChannelReplyDispatcherAdapter;
+  /** @deprecated Use replyDispatcher instead. */
+  outboundDispatcher?: ChannelOutboundDispatcherAdapter;
   status?: ChannelStatusAdapter<ResolvedAccount, Probe, Audit>;
   gatewayMethods?: string[];
   gateway?: ChannelGatewayAdapter<ResolvedAccount>;

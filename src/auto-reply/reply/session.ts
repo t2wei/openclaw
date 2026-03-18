@@ -394,12 +394,16 @@ export async function initSessionState(params: {
   // sessions (e.g. DM without topics) must not inherit a stale threadId from a
   // previous interaction that happened inside a topic/thread.
   const lastThreadIdRaw = ctx.MessageThreadId || (isThread ? baseEntry?.lastThreadId : undefined);
+  const lastReplyTargetIdRaw =
+    (typeof ctx.ReplyTargetId === "string" ? ctx.ReplyTargetId.trim() : undefined) ||
+    baseEntry?.deliveryContext?.replyTargetId;
   const deliveryFields = normalizeSessionDeliveryFields({
     deliveryContext: {
       channel: lastChannelRaw,
       to: lastToRaw,
       accountId: lastAccountIdRaw,
       threadId: lastThreadIdRaw,
+      replyTargetId: lastReplyTargetIdRaw,
     },
   });
   const lastChannel = deliveryFields.lastChannel ?? lastChannelRaw;

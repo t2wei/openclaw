@@ -53,7 +53,11 @@ export type GetReplyOptions = {
   onBlockReply?: (payload: ReplyPayload, context?: BlockReplyContext) => Promise<void> | void;
   onToolResult?: (payload: ReplyPayload) => Promise<void> | void;
   /** Called when a tool phase starts/updates, before summary payloads are emitted. */
-  onToolStart?: (payload: { name?: string; phase?: string }) => Promise<void> | void;
+  onToolStart?: (payload: { name?: string; phase?: string; meta?: string }) => Promise<void> | void;
+  /** Notification-only callback for block replies when block streaming is disabled.
+   * Unlike onBlockReply, this does NOT affect didStream or final payload suppression.
+   * Use this to observe intermediate narration steps without interfering with delivery. */
+  onBlockNotify?: (payload: ReplyPayload) => void;
   /** Called when context auto-compaction starts (allows UX feedback during the pause). */
   onCompactionStart?: () => Promise<void> | void;
   /** Called when context auto-compaction completes. */

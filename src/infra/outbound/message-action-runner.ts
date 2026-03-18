@@ -68,7 +68,7 @@ function resolveAndApplyOutboundThreadId(
     toolContext?: ChannelThreadingToolContext;
     allowSlackAutoThread: boolean;
   },
-): string | undefined {
+): { threadId?: string; replyToId?: string } {
   const threadId = readStringParam(params, "threadId");
   const slackAutoThreadId =
     ctx.allowSlackAutoThread && ctx.channel === "slack" && !threadId
@@ -78,13 +78,31 @@ function resolveAndApplyOutboundThreadId(
     ctx.channel === "telegram" && !threadId
       ? resolveTelegramAutoThreadId({ to: ctx.to, toolContext: ctx.toolContext })
       : undefined;
-  const resolved = threadId ?? slackAutoThreadId ?? telegramAutoThreadId;
+  // Generic fallback for channels without dedicated auto-threading (e.g. Discord,
+  // Feishu plugin channels).  If the tool context carries a thread ID and the agent
+  // didn't explicitly specify one, inject it so the message lands in the correct
+  // thread/topic instead of the parent group.
+  const genericAutoThreadId =
+    !threadId &&
+    ctx.channel !== "slack" &&
+    ctx.channel !== "telegram" &&
+    ctx.toolContext?.currentThreadTs
+      ? ctx.toolContext.currentThreadTs
+      : undefined;
+  const resolved = threadId ?? slackAutoThreadId ?? telegramAutoThreadId ?? genericAutoThreadId;
   // Write auto-resolved threadId back into params so downstream dispatch
   // (plugin `readStringParam(params, "threadId")`) picks it up.
   if (resolved && !params.threadId) {
     params.threadId = resolved;
   }
-  return resolved ?? undefined;
+  // Pass through replyTargetId from session context for channels that need a
+  // separate API-ready reply target (e.g. Feishu om_ message ID distinct from
+  // omt_ topic scope).  Channel outbound adapters consume this as replyToId.
+  const replyTargetId = ctx.toolContext?.replyTargetId;
+  return {
+    threadId: resolved ?? undefined,
+    replyToId: replyTargetId ?? undefined,
+  };
 }
 
 export type RunMessageActionParams = {
@@ -482,13 +500,16 @@ async function handleSendAction(ctx: ResolvedActionContext): Promise<MessageActi
   const bestEffort = readBooleanParam(params, "bestEffort");
   const silent = readBooleanParam(params, "silent");
 
-  const replyToId = readStringParam(params, "replyTo");
-  const resolvedThreadId = resolveAndApplyOutboundThreadId(params, {
+  const explicitReplyToId = readStringParam(params, "replyTo");
+  const resolvedThread = resolveAndApplyOutboundThreadId(params, {
     channel,
     to,
     toolContext: input.toolContext,
-    allowSlackAutoThread: channel === "slack" && !replyToId,
+    allowSlackAutoThread: channel === "slack" && !explicitReplyToId,
   });
+  // Explicit replyTo from agent takes priority; fall back to session context replyTargetId
+  const replyToId = explicitReplyToId ?? resolvedThread.replyToId;
+  const resolvedThreadId = resolvedThread.threadId;
   const outboundRoute =
     agentId && !dryRun
       ? await resolveOutboundSessionRoute({
@@ -601,12 +622,13 @@ async function handlePollAction(ctx: ResolvedActionContext): Promise<MessageActi
     throw new Error("pollAnonymous/pollPublic are only supported for Telegram polls");
   }
 
-  const resolvedThreadId = resolveAndApplyOutboundThreadId(params, {
+  const resolvedThread2 = resolveAndApplyOutboundThreadId(params, {
     channel,
     to,
     toolContext: input.toolContext,
     allowSlackAutoThread: channel === "slack",
   });
+  const resolvedThreadId = resolvedThread2.threadId;
 
   const base = typeof params.message === "string" ? params.message : "";
   await maybeApplyCrossContextMarker({

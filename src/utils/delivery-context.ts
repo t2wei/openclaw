@@ -6,6 +6,8 @@ export type DeliveryContext = {
   to?: string;
   accountId?: string;
   threadId?: string | number;
+  /** Channel-specific reply target ID (e.g. Feishu om_ message_id for topic reply). */
+  replyTargetId?: string;
 };
 
 export type DeliveryContextSessionSource = {
@@ -35,7 +37,11 @@ export function normalizeDeliveryContext(context?: DeliveryContext): DeliveryCon
         : undefined;
   const normalizedThreadId =
     typeof threadId === "string" ? (threadId ? threadId : undefined) : threadId;
-  if (!channel && !to && !accountId && normalizedThreadId == null) {
+  const replyTargetId =
+    typeof context.replyTargetId === "string"
+      ? context.replyTargetId.trim() || undefined
+      : undefined;
+  if (!channel && !to && !accountId && normalizedThreadId == null && !replyTargetId) {
     return undefined;
   }
   const normalized: DeliveryContext = {
@@ -45,6 +51,9 @@ export function normalizeDeliveryContext(context?: DeliveryContext): DeliveryCon
   };
   if (normalizedThreadId != null) {
     normalized.threadId = normalizedThreadId;
+  }
+  if (replyTargetId) {
+    normalized.replyTargetId = replyTargetId;
   }
   return normalized;
 }
@@ -138,6 +147,9 @@ export function mergeDeliveryContext(
     threadId: channelsConflict
       ? normalizedPrimary?.threadId
       : (normalizedPrimary?.threadId ?? normalizedFallback?.threadId),
+    replyTargetId: channelsConflict
+      ? normalizedPrimary?.replyTargetId
+      : (normalizedPrimary?.replyTargetId ?? normalizedFallback?.replyTargetId),
   });
 }
 

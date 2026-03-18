@@ -179,6 +179,7 @@ export const agentHandlers: GatewayRequestHandlers = {
       accountId?: string;
       replyAccountId?: string;
       threadId?: string;
+      replyTargetId?: string;
       groupId?: string;
       groupChannel?: string;
       groupSpace?: string;
@@ -593,6 +594,10 @@ export const agentHandlers: GatewayRequestHandlers = {
         channel: resolvedChannel,
         accountId: resolvedAccountId,
         threadId: resolvedThreadId,
+        replyTargetId:
+          typeof request.replyTargetId === "string" && request.replyTargetId.trim()
+            ? request.replyTargetId.trim()
+            : undefined,
         runContext: {
           messageChannel: originMessageChannel,
           accountId: resolvedAccountId,

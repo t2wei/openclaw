@@ -1514,6 +1514,7 @@ export async function runEmbeddedAttempt(
           modelAuthMode: resolveModelAuthMode(params.model.provider, params.config),
           currentChannelId: params.currentChannelId,
           currentThreadTs: params.currentThreadTs,
+          replyTargetId: params.replyTargetId,
           currentMessageId: params.currentMessageId,
           replyToMode: params.replyToMode,
           hasRepliedRef: params.hasRepliedRef,

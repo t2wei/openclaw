@@ -49,6 +49,10 @@ export function createOpenClawTools(
     currentChannelId?: string;
     /** Current thread timestamp for auto-threading (Slack). */
     currentThreadTs?: string;
+    /** Raw session thread scope ID (may be platform-specific, e.g. Feishu omt_). */
+    messageThreadId?: string | number;
+    /** Channel-specific reply target (e.g. Feishu om_ message ID) for P7 threading. */
+    replyTargetId?: string;
     /** Current inbound message id for action fallbacks (e.g. Telegram react). */
     currentMessageId?: string | number;
     /** Reply-to mode for Slack auto-threading. */
@@ -129,6 +133,9 @@ export function createOpenClawTools(
         currentChannelId: options?.currentChannelId,
         currentChannelProvider: options?.agentChannel,
         currentThreadTs: options?.currentThreadTs,
+        messageThreadId:
+          options?.messageThreadId != null ? String(options.messageThreadId) : undefined,
+        replyTargetId: options?.replyTargetId,
         currentMessageId: options?.currentMessageId,
         replyToMode: options?.replyToMode,
         hasRepliedRef: options?.hasRepliedRef,

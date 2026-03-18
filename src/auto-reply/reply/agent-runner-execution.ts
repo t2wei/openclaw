@@ -384,9 +384,10 @@ export async function runAgentTurnWithFallback(params: {
                 if (evt.stream === "tool") {
                   const phase = typeof evt.data.phase === "string" ? evt.data.phase : "";
                   const name = typeof evt.data.name === "string" ? evt.data.name : undefined;
+                  const meta = typeof evt.data.meta === "string" ? evt.data.meta : undefined;
                   if (phase === "start" || phase === "update") {
                     await params.typingSignals.signalToolStart();
-                    await params.opts?.onToolStart?.({ name, phase });
+                    await params.opts?.onToolStart?.({ name, phase, meta });
                   }
                 }
                 // Track auto-compaction completion and notify UI layer
@@ -416,6 +417,7 @@ export async function runAgentTurnWithFallback(params: {
                     blockStreamingEnabled: params.blockStreamingEnabled,
                     blockReplyPipeline,
                     directlySentBlockKeys,
+                    onBlockNotify: params.opts?.onBlockNotify,
                   })
                 : undefined,
               onBlockReplyFlush:

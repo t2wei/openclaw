@@ -241,6 +241,8 @@ export function createOpenClawCodingTools(options?: {
   currentChannelId?: string;
   /** Current thread timestamp for auto-threading (Slack). */
   currentThreadTs?: string;
+  /** Channel-specific reply target (e.g. Feishu om_ message ID) for P7 threading. */
+  replyTargetId?: string;
   /** Current inbound message id for action fallbacks (e.g. Telegram react). */
   currentMessageId?: string | number;
   /** Group id for channel-level tool policy resolution. */
@@ -522,6 +524,8 @@ export function createOpenClawCodingTools(options?: {
       ]),
       currentChannelId: options?.currentChannelId,
       currentThreadTs: options?.currentThreadTs,
+      messageThreadId: options?.messageThreadId,
+      replyTargetId: options?.replyTargetId,
       currentMessageId: options?.currentMessageId,
       replyToMode: options?.replyToMode,
       hasRepliedRef: options?.hasRepliedRef,
