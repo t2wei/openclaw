@@ -56,6 +56,8 @@ export type AgentCommandOpts = {
   replyAccountId?: string;
   /** Override delivery thread/topic id (separate from session routing). */
   threadId?: string | number;
+  /** Channel-specific reply target for outbound delivery (e.g. Feishu om_ message_id). */
+  replyTargetId?: string;
   /** Message channel context (webchat|voicewake|whatsapp|...). */
   messageChannel?: string;
   channel?: string; // delivery channel (whatsapp|telegram|...)
