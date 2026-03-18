@@ -868,8 +868,11 @@ async function agentCommandInternal(
       if (!opts.deliver && sessionEntry?.spawnedBy && finalText) {
         const parentKey = sessionEntry.spawnedBy;
         const acpAgent = resolveAgentIdFromSessionKey(sessionKey);
-        const { deliveryContext: parentDelivery, threadId: parentThreadId } =
-          extractDeliveryInfo(parentKey);
+        const {
+          deliveryContext: parentDelivery,
+          threadId: parentThreadId,
+          replyTargetId: parentReplyTargetId,
+        } = extractDeliveryInfo(parentKey);
         log.info?.(
           `[A2A callback] session=${sessionKey} → parent=${parentKey} agent=${acpAgent} textLen=${finalText.length} channel=${parentDelivery?.channel ?? "unknown"}`,
         );
@@ -884,6 +887,7 @@ async function agentCommandInternal(
             channel: parentDelivery?.channel,
             to: parentDelivery?.to,
             threadId: parentThreadId,
+            replyTargetId: parentReplyTargetId,
             accountId: parentDelivery?.accountId,
             lane: AGENT_LANE_NESTED,
             extraSystemPrompt: [
@@ -1261,12 +1265,6 @@ async function agentCommandInternal(
         result,
       });
     }
-
-    const payloads = result.payloads ?? [];
-    const _finalText = payloads
-      .map((p) => p.text?.trim())
-      .filter(Boolean)
-      .join("\n");
 
     return await deliverAgentCommandResult({
       cfg,
