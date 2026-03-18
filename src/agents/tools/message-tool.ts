@@ -497,6 +497,10 @@ type MessageToolOptions = {
   currentChannelId?: string;
   currentChannelProvider?: string;
   currentThreadTs?: string;
+  /** Raw session thread scope ID (may be platform-specific, e.g. Feishu omt_). */
+  messageThreadId?: string;
+  /** Channel-specific reply target (e.g. Feishu om_ message ID). */
+  replyTargetId?: string;
   currentMessageId?: string | number;
   replyToMode?: "off" | "first" | "all";
   hasRepliedRef?: { value: boolean };
@@ -755,6 +759,8 @@ export function createMessageTool(options?: MessageToolOptions): AnyAgentTool {
         options?.currentChannelId ||
         options?.currentChannelProvider ||
         options?.currentThreadTs ||
+        options?.messageThreadId ||
+        options?.replyTargetId ||
         hasCurrentMessageId ||
         options?.replyToMode ||
         options?.hasRepliedRef
@@ -762,6 +768,8 @@ export function createMessageTool(options?: MessageToolOptions): AnyAgentTool {
               currentChannelId: options?.currentChannelId,
               currentChannelProvider: options?.currentChannelProvider,
               currentThreadTs: options?.currentThreadTs,
+              messageThreadId: options?.messageThreadId,
+              replyTargetId: options?.replyTargetId,
               currentMessageId: options?.currentMessageId,
               replyToMode: options?.replyToMode,
               hasRepliedRef: options?.hasRepliedRef,
