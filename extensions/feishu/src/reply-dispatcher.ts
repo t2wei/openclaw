@@ -235,7 +235,11 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
       );
       const historyText =
         historyEntries.length > 0 ? historyEntries.join("\n\n---\n\n") : undefined;
-      await streaming.close(text, { addFullTextPanel: hadIntermediateSteps, historyText });
+      await streaming.close(text, {
+        addFullTextPanel: hadIntermediateSteps,
+        historyText,
+        panelStyle: account.config?.historyPanel ?? undefined,
+      });
     }
     streaming = null;
     streamingStartPromise = null;
@@ -419,7 +423,7 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
           historyEntries.push(`\`${label}\``);
         }
       },
-      onBlockNotify: (payload) => {
+      onBlockNotify: (payload: { text?: string }) => {
         if (payload.text) {
           hadBlockReply = true;
           historyEntries.push(payload.text);
