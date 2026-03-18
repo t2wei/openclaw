@@ -1266,6 +1266,8 @@ async function agentCommandInternal(
       });
     }
 
+    const payloads = result.payloads ?? [];
+
     return await deliverAgentCommandResult({
       cfg,
       deps,

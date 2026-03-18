@@ -1,5 +1,7 @@
 import { Type } from "@sinclair/typebox";
 import type { OpenClawConfig } from "../../config/config.js";
+import { loadConfig } from "../../config/io.js";
+import { callGateway } from "../../gateway/call.js";
 import { SESSION_LABEL_MAX_LENGTH } from "../../sessions/session-label.js";
 import type { GatewayMessageChannel } from "../../utils/message-channel.js";
 import type { AnyAgentTool } from "./common.js";

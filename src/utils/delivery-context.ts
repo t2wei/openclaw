@@ -6,6 +6,7 @@ export type DeliveryContext = {
   to?: string;
   accountId?: string;
   threadId?: string | number;
+  replyTargetId?: string;
 };
 
 export type DeliveryContextSessionSource = {
