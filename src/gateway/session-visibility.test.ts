@@ -85,13 +85,18 @@ describe("evaluateSessionVisibility", () => {
       };
       const result = evaluateSessionVisibility(config, ctx);
       expect(result!.allowed).toBe(true);
-      expect(result!.isAdmin).toBe(false);
+      if (result!.allowed) {
+        expect(result!.isAdmin).toBe(false);
+      }
     });
 
     it("skips admin check when no authClaims", () => {
       const ctx: SessionVisibilityContext = { authUser: "admin@example.com" };
       const result = evaluateSessionVisibility(config, ctx);
-      expect(result!.isAdmin).toBe(false);
+      expect(result!.allowed).toBe(true);
+      if (result!.allowed) {
+        expect(result!.isAdmin).toBe(false);
+      }
     });
   });
 
