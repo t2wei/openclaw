@@ -51,11 +51,17 @@ export function buildThreadingToolContext(params: {
       currentChannelProvider: provider ?? (rawProvider as ChannelId),
       currentMessageId,
       hasRepliedRef,
-      // Preserve thread context for channels without a threading adapter (e.g. Feishu).
-      // MessageThreadId carries the topic/thread scope so the message tool targets
-      // the correct thread instead of falling back to the parent group.
+      // Preserve thread context for channels without a dedicated threading adapter.
+      // Pass all three fields so channel-specific resolvers can make informed decisions:
+      // - currentThreadTs: computed fallback (backwards compat for generic channels)
+      // - messageThreadId: raw session thread scope (may be platform-specific, e.g. Feishu omt_)
+      // - replyTargetId: API-ready reply target (e.g. Feishu om_ message ID)
       currentThreadTs:
         sessionCtx.MessageThreadId != null ? String(sessionCtx.MessageThreadId) : undefined,
+      messageThreadId:
+        sessionCtx.MessageThreadId != null ? String(sessionCtx.MessageThreadId) : undefined,
+      replyTargetId:
+        sessionCtx.ReplyTargetId != null ? String(sessionCtx.ReplyTargetId) : undefined,
     };
   }
   const context =
