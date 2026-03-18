@@ -290,19 +290,24 @@ export class FeishuStreamingSession {
       .catch((error) => onError?.(error));
   }
 
-  async update(text: string): Promise<void> {
+  async update(text: string, options?: { replace?: boolean }): Promise<void> {
     if (!this.state || this.closed) {
       return;
     }
-    const mergedInput = mergeStreamingText(this.pendingText ?? this.state.currentText, text);
-    if (!mergedInput || mergedInput === this.state.currentText) {
+    // replace mode: set card content directly without merging with previous text.
+    // Used for narration blocks and final text where the new content should
+    // completely replace whatever is currently displayed.
+    const resolvedInput = options?.replace
+      ? text
+      : mergeStreamingText(this.pendingText ?? this.state.currentText, text);
+    if (!resolvedInput || resolvedInput === this.state.currentText) {
       return;
     }
 
     // Throttle: skip if updated recently, but remember pending text
     const now = Date.now();
     if (now - this.lastUpdateTime < this.updateThrottleMs) {
-      this.pendingText = mergedInput;
+      this.pendingText = resolvedInput;
       return;
     }
     this.pendingText = null;
@@ -312,25 +317,40 @@ export class FeishuStreamingSession {
       if (!this.state || this.closed) {
         return;
       }
-      const mergedText = mergeStreamingText(this.state.currentText, mergedInput);
-      if (!mergedText || mergedText === this.state.currentText) {
+      const finalContent = options?.replace
+        ? resolvedInput
+        : mergeStreamingText(this.state.currentText, resolvedInput);
+      if (!finalContent || finalContent === this.state.currentText) {
         return;
       }
-      this.state.currentText = mergedText;
-      await this.updateCardContent(mergedText, (e) => this.log?.(`Update failed: ${String(e)}`));
+      this.state.currentText = finalContent;
+      await this.updateCardContent(finalContent, (e) => this.log?.(`Update failed: ${String(e)}`));
     });
     await this.queue;
   }
 
-  async close(finalText?: string): Promise<void> {
+  async close(
+    finalText?: string,
+    options?: {
+      addFullTextPanel?: boolean;
+      historyText?: string;
+      panelStyle?: {
+        title?: string;
+        headerBackgroundColor?: string;
+        borderColor?: string;
+      };
+    },
+  ): Promise<void> {
     if (!this.state || this.closed) {
       return;
     }
     this.closed = true;
     await this.queue;
 
+    // When finalText is provided, use it directly — it is the definitive card
+    // content and should replace whatever was displayed during streaming.
     const pendingMerged = mergeStreamingText(this.state.currentText, this.pendingText ?? undefined);
-    const text = finalText ? mergeStreamingText(pendingMerged, finalText) : pendingMerged;
+    const text = finalText ?? pendingMerged;
     const apiBase = resolveApiBase(this.creds.domain);
 
     // Only send final update if content differs from what's already displayed
@@ -339,36 +359,108 @@ export class FeishuStreamingSession {
       this.state.currentText = text;
     }
 
-    // Close streaming mode
+    // Close streaming mode (and optionally append "Show full text" button)
+    // via batch_update API to combine both operations in a single request.
     this.state.sequence += 1;
-    await fetchWithSsrFGuard({
-      url: `${apiBase}/cardkit/v1/cards/${this.state.cardId}/settings`,
-      init: {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${await getToken(this.creds)}`,
-          "Content-Type": "application/json; charset=utf-8",
-        },
-        body: JSON.stringify({
-          settings: JSON.stringify({
+    const batchActions: Record<string, unknown>[] = [
+      {
+        action: "partial_update_setting",
+        params: {
+          settings: {
             config: { streaming_mode: false, summary: { content: truncateSummary(text) } },
-          }),
-          sequence: this.state.sequence,
-          uuid: `c_${this.state.cardId}_${this.state.sequence}`,
-        }),
+          },
+        },
       },
-      policy: { allowedHostnames: resolveAllowedHostnames(this.creds.domain) },
-      auditContext: "feishu.streaming-card.close",
-    })
-      .then(async ({ release }) => {
-        await release();
-      })
-      .catch((e) => this.log?.(`Close failed: ${String(e)}`));
+    ];
+
+    if (options?.addFullTextPanel && text) {
+      // Use accumulated history entries when available; fall back to final text
+      const panelContent = options.historyText ?? text;
+      const ps = options.panelStyle;
+      const headerBg = ps?.headerBackgroundColor;
+      const borderColor = ps?.borderColor ?? "grey";
+      batchActions.push({
+        action: "add_elements",
+        params: {
+          type: "append",
+          elements: [
+            {
+              tag: "collapsible_panel",
+              expanded: false,
+              header: {
+                title: {
+                  tag: "plain_text",
+                  content: ps?.title ?? "history",
+                },
+                ...(headerBg ? { background_color: headerBg } : {}),
+                vertical_align: "center",
+                icon: {
+                  tag: "standard_icon",
+                  token: "down-small-ccm_outlined",
+                  size: "16px 16px",
+                },
+                icon_position: "follow_text",
+                icon_expanded_angle: -180,
+              },
+              border: { color: borderColor, corner_radius: "5px" },
+              padding: "8px 8px 8px 8px",
+              element_id: "full_text_panel",
+              elements: [
+                {
+                  tag: "markdown",
+                  content: panelContent,
+                  text_size: "notation",
+                  element_id: "full_text_content",
+                },
+              ],
+            },
+          ],
+        },
+      });
+    }
+
+    try {
+      const { response, release } = await fetchWithSsrFGuard({
+        url: `${apiBase}/cardkit/v1/cards/${this.state.cardId}/batch_update`,
+        init: {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${await getToken(this.creds)}`,
+            "Content-Type": "application/json; charset=utf-8",
+          },
+          body: JSON.stringify({
+            actions: JSON.stringify(batchActions),
+            sequence: this.state.sequence,
+            uuid: `c_${this.state.cardId}_${this.state.sequence}`,
+          }),
+        },
+        policy: { allowedHostnames: resolveAllowedHostnames(this.creds.domain) },
+        auditContext: "feishu.streaming-card.close",
+      });
+      try {
+        const respData = (await response.json()) as { code?: number; msg?: string };
+        if (respData.code !== 0) {
+          this.log?.(
+            `batch_update failed: code=${respData.code}, msg=${respData.msg ?? "unknown"}`,
+          );
+        }
+      } catch (parseErr) {
+        this.log?.(`batch_update response parse error: ${String(parseErr)}`);
+      } finally {
+        release();
+      }
+    } catch (e) {
+      this.log?.(`Close failed: ${String(e)}`);
+    }
 
     this.log?.(`Closed streaming: cardId=${this.state.cardId}`);
   }
 
   isActive(): boolean {
     return this.state !== null && !this.closed;
+  }
+
+  getMessageId(): string | undefined {
+    return this.state?.messageId;
   }
 }

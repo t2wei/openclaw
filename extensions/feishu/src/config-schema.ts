@@ -45,6 +45,16 @@ const RenderModeSchema = z.enum(["auto", "raw", "card"]).optional();
 // for incremental text display with a "Thinking..." placeholder
 const StreamingModeSchema = z.boolean().optional();
 
+// History panel style for streaming cards (collapsible panel appended on close)
+const HistoryPanelSchema = z
+  .object({
+    title: z.string().optional(),
+    headerBackgroundColor: z.string().optional(),
+    borderColor: z.string().optional(),
+  })
+  .strict()
+  .optional();
+
 const BlockStreamingCoalesceSchema = z
   .object({
     enabled: z.boolean().optional(),
@@ -169,6 +179,8 @@ const FeishuSharedConfigShape = {
   heartbeat: ChannelHeartbeatVisibilitySchema,
   renderMode: RenderModeSchema,
   streaming: StreamingModeSchema,
+  historyPanel: HistoryPanelSchema,
+  historyPanelScope: z.enum(["tool", "all"]).optional(),
   tools: FeishuToolsConfigSchema,
   replyInThread: ReplyInThreadSchema,
   reactionNotifications: ReactionNotificationModeSchema,
