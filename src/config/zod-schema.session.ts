@@ -50,6 +50,13 @@ export const SessionSchema = z
       .optional(),
     resetByChannel: z.record(z.string(), SessionResetConfigSchema).optional(),
     store: z.string().optional(),
+    redis: z
+      .object({
+        url: z.string(),
+        keyPrefix: z.string().optional(),
+      })
+      .strict()
+      .optional(),
     typingIntervalSeconds: z.number().int().positive().optional(),
     typingMode: TypingModeSchema.optional(),
     parentForkMaxTokens: z.number().int().nonnegative().optional(),
