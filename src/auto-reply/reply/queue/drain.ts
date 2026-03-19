@@ -37,7 +37,11 @@ export function kickFollowupDrainIfIdle(key: string): void {
 
 type OriginRoutingMetadata = Pick<
   FollowupRun,
-  "originatingChannel" | "originatingTo" | "originatingAccountId" | "originatingThreadId"
+  | "originatingChannel"
+  | "originatingTo"
+  | "originatingAccountId"
+  | "originatingThreadId"
+  | "originatingReplyTargetId"
 >;
 
 function resolveOriginRoutingMetadata(items: FollowupRun[]): OriginRoutingMetadata {
@@ -49,6 +53,9 @@ function resolveOriginRoutingMetadata(items: FollowupRun[]): OriginRoutingMetada
     originatingThreadId: items.find(
       (item) => item.originatingThreadId != null && item.originatingThreadId !== "",
     )?.originatingThreadId,
+    // Channel-specific reply target (e.g. Feishu om_ message ID for topic threading).
+    originatingReplyTargetId: items.find((item) => item.originatingReplyTargetId)
+      ?.originatingReplyTargetId,
   };
 }
 
