@@ -1,3 +1,4 @@
+import { resolveSendableOutboundReplyParts } from "openclaw/plugin-sdk/reply-payload";
 import { logVerbose } from "../../globals.js";
 import { SILENT_REPLY_TOKEN } from "../tokens.js";
 import type { BlockReplyContext, ReplyPayload } from "../types.js";
@@ -57,9 +58,6 @@ export function normalizeReplyPayloadDirectives(params: {
   };
 }
 
-const hasRenderableMedia = (payload: ReplyPayload): boolean =>
-  Boolean(payload.mediaUrl) || (payload.mediaUrls?.length ?? 0) > 0;
-
 export function createBlockReplyDeliveryHandler(params: {
   onBlockReply: (payload: ReplyPayload, context?: BlockReplyContext) => Promise<void> | void;
   currentMessageId?: string;
@@ -76,7 +74,7 @@ export function createBlockReplyDeliveryHandler(params: {
 }): (payload: ReplyPayload) => Promise<void> {
   return async (payload) => {
     const { text, skip } = params.normalizeStreamingText(payload);
-    if (skip && !hasRenderableMedia(payload)) {
+    if (skip && !resolveSendableOutboundReplyParts(payload).hasMedia) {
       return;
     }
 
@@ -109,7 +107,7 @@ export function createBlockReplyDeliveryHandler(params: {
       ? await params.normalizeMediaPaths(normalized.payload)
       : normalized.payload;
     const blockPayload = params.applyReplyToMode(mediaNormalizedPayload);
-    const blockHasMedia = hasRenderableMedia(blockPayload);
+    const blockHasMedia = resolveSendableOutboundReplyParts(blockPayload).hasMedia;
 
     // Skip empty payloads unless they have audioAsVoice flag (need to track it).
     if (!blockPayload.text && !blockHasMedia && !blockPayload.audioAsVoice) {

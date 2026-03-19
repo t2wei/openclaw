@@ -3,6 +3,13 @@ import { z } from "zod";
 export { z };
 import { buildSecretInputSchema, hasConfiguredSecretInput } from "./secret-input.js";
 
+const ChannelActionsSchema = z
+  .object({
+    reactions: z.boolean().optional(),
+  })
+  .strict()
+  .optional();
+
 const DmPolicySchema = z.enum(["open", "pairing", "allowlist"]);
 const GroupPolicySchema = z.union([
   z.enum(["open", "allowlist", "disabled"]),
@@ -182,6 +189,7 @@ const FeishuSharedConfigShape = {
   historyPanel: HistoryPanelSchema,
   historyPanelScope: z.enum(["tool", "all"]).optional(),
   tools: FeishuToolsConfigSchema,
+  actions: ChannelActionsSchema,
   replyInThread: ReplyInThreadSchema,
   reactionNotifications: ReactionNotificationModeSchema,
   typingIndicator: z.boolean().optional(),

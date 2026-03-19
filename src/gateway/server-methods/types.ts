@@ -25,6 +25,10 @@ export type GatewayClient = {
   authUser?: string;
   /** Decoded auth claims (e.g. JWT payload from trusted-proxy). */
   authClaims?: Record<string, unknown>;
+  /** Internal-only auth context that cannot be supplied through gateway RPC payloads. */
+  internal?: {
+    allowModelOverride?: boolean;
+  };
 };
 
 export type RespondFn = (
@@ -67,6 +71,12 @@ export type GatewayRequestContext = {
     clientRunId: string,
     sessionKey?: string,
   ) => { sessionKey: string; clientRunId: string } | undefined;
+  subscribeSessionEvents: (connId: string) => void;
+  unsubscribeSessionEvents: (connId: string) => void;
+  subscribeSessionMessageEvents: (connId: string, sessionKey: string) => void;
+  unsubscribeSessionMessageEvents: (connId: string, sessionKey: string) => void;
+  unsubscribeAllSessionEvents: (connId: string) => void;
+  getSessionEventSubscriberConnIds: () => ReadonlySet<string>;
   registerToolEventRecipient: (runId: string, connId: string) => void;
   dedupe: Map<string, DedupeEntry>;
   wizardSessions: Map<string, WizardSession>;
