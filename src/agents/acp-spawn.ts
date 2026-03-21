@@ -680,7 +680,10 @@ export async function spawnAcpDirect(
       conversationId: deliveryThreadId,
     });
   const resolvedDeliveryThreadId = boundDeliveryTarget.threadId ?? deliveryThreadId;
-  const hasDeliveryTarget = Boolean(requesterOrigin?.channel && inferredDeliveryTo);
+  // Only deliver to external channels for thread-bound (H2A) spawns.
+  // A2A spawns (thread=false) keep output internal via sessions_send.
+  const hasDeliveryTarget =
+    requestThreadBinding && Boolean(requesterOrigin?.channel && inferredDeliveryTo);
   // Fresh one-shot ACP runs should bootstrap the worker first, then let higher layers
   // decide how to relay status. Inline delivery is reserved for thread-bound sessions.
   const useInlineDelivery =

@@ -500,10 +500,14 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount> = {
         if (ctx.action === "thread-reply" && !replyToMessageId) {
           throw new Error("Feishu thread-reply requires messageId.");
         }
-        const card =
+        const rawCard =
           ctx.params.card && typeof ctx.params.card === "object"
             ? (ctx.params.card as Record<string, unknown>)
             : undefined;
+        // Treat empty card objects (e.g. `card: {}`) as "no card" so we fall
+        // through to the text path instead of sending invalid JSON to Feishu
+        // API (error 200621: parse card json err).
+        const card = rawCard && Object.keys(rawCard).length > 0 ? rawCard : undefined;
         const text = readFirstString(ctx.params, ["text", "message"]);
         if (!card && !text) {
           throw new Error(`Feishu ${ctx.action} requires text/message or card.`);
@@ -568,10 +572,11 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount> = {
           throw new Error("Feishu edit requires messageId.");
         }
         const text = readFirstString(ctx.params, ["text", "message"]);
-        const card =
+        const rawCard =
           ctx.params.card && typeof ctx.params.card === "object"
             ? (ctx.params.card as Record<string, unknown>)
             : undefined;
+        const card = rawCard && Object.keys(rawCard).length > 0 ? rawCard : undefined;
         const { editMessageFeishu } = await loadFeishuChannelRuntime();
         const result = await editMessageFeishu({
           cfg: ctx.cfg,

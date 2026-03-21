@@ -463,27 +463,12 @@ export class AcpxRuntime implements AcpRuntime {
     }
     let ensuredEvent = findSessionIdentifierEvent(events);
 
-    if (
-      ensuredEvent &&
-      !resumeSessionId &&
-      (await this.shouldReplaceEnsuredSession({
-        sessionName,
-        agent,
-        cwd,
-      }))
-    ) {
-      events = await this.createNamedSession({
-        agent,
-        cwd,
-        sessionName,
-      });
-      if (events.length === 0) {
-        this.logger?.warn?.(
-          `acpx ensureSession returned no events after replacing dead session: session=${sessionName} agent=${agent} cwd=${cwd}`,
-        );
-      }
-      ensuredEvent = findSessionIdentifierEvent(events);
-    }
+    // OXSCI PATCH: Do NOT replace dead sessions with fresh ones.
+    // A "dead" session (queue owner exited after TTL) still has its session record
+    // and conversation history intact on disk. The next `prompt` command will
+    // restart a queue owner for the existing session, preserving context.
+    // Upstream's shouldReplaceEnsuredSession treats normal TTL expiry as an error
+    // and calls `sessions new` (context loss). Skip this to restore correct behavior.
 
     if (!ensuredEvent && !resumeSessionId) {
       events = await this.createNamedSession({
