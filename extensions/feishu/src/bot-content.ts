@@ -96,7 +96,11 @@ export function resolveFeishuGroupSession(params: {
     (legacyTopicSessionMode === "enabled" ? "group_topic" : "group");
   const topicScope =
     groupSessionScope === "group_topic" || groupSessionScope === "group_topic_sender"
-      ? (normalizedRootId ?? normalizedThreadId ?? (replyInThread ? messageId : null))
+      ? // threadId (omt_xxx) is present on ALL messages in a topic — including
+        // the topic-creating message which has no root_id.  root_id (om_xxx) only
+        // appears on reply messages.  Prefer threadId so that every message in the
+        // same topic resolves to the same session key.
+        (normalizedThreadId ?? normalizedRootId ?? (replyInThread ? messageId : null))
       : null;
 
   let peerId = chatId;
