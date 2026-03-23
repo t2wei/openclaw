@@ -129,6 +129,19 @@ export async function applySessionsPatchToStore(params: {
     }
   }
 
+  if ("lastCallerSessionKey" in patch) {
+    const raw = patch.lastCallerSessionKey;
+    if (raw === null) {
+      next.lastCallerSessionKey = undefined;
+    } else if (raw !== undefined) {
+      const trimmed = String(raw).trim();
+      if (!trimmed) {
+        return invalid("invalid lastCallerSessionKey: empty");
+      }
+      next.lastCallerSessionKey = trimmed;
+    }
+  }
+
   if ("spawnedWorkspaceDir" in patch) {
     const raw = patch.spawnedWorkspaceDir;
     if (raw === null) {

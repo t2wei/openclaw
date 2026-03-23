@@ -33,13 +33,13 @@ import {
   readConfigFileSnapshotForWrite,
   setRuntimeConfigSnapshot,
 } from "../config/config.js";
-import { extractDeliveryInfo } from "../config/sessions/delivery-info.js";
 import {
   mergeSessionEntry,
   resolveAgentIdFromSessionKey,
   type SessionEntry,
   updateSessionStore,
 } from "../config/sessions.js";
+import { extractDeliveryInfo } from "../config/sessions/delivery-info.js";
 import { resolveSessionTranscriptFile } from "../config/sessions/transcript.js";
 import {
   clearAgentRunContext,
@@ -898,7 +898,10 @@ async function agentCommandInternal(
       // session's delivery context so followup delivery routes correctly
       // regardless of parent session entry mutations (race-safe).
       if (!opts.deliver && sessionEntry?.spawnedBy && finalText) {
-        const parentKey = sessionEntry.spawnedBy;
+        // Prefer lastCallerSessionKey (set by acp_send) over spawnedBy (set at spawn).
+        // This ensures callback routes to the session that most recently communicated
+        // with this ACP session, not necessarily the original spawner.
+        const parentKey = sessionEntry.lastCallerSessionKey ?? sessionEntry.spawnedBy;
         const acpAgent = resolveAgentIdFromSessionKey(sessionKey);
         const {
           deliveryContext: parentDelivery,

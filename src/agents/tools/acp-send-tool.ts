@@ -72,6 +72,17 @@ export function createAcpSendTool(opts?: {
         if (typeof response?.runId === "string" && response.runId) {
           runId = response.runId;
         }
+        // Update child session's lastCallerSessionKey so callback routes to current caller
+        if (opts?.agentSessionKey) {
+          void callGateway({
+            method: "sessions.patch",
+            params: {
+              key: resolution.resolvedKey,
+              lastCallerSessionKey: opts.agentSessionKey,
+            },
+            timeoutMs: 5_000,
+          }).catch(() => {});
+        }
       } catch (err) {
         const messageText =
           err instanceof Error ? err.message : typeof err === "string" ? err : "error";
