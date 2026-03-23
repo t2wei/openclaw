@@ -668,16 +668,14 @@ function resolveAcpSpawnBootstrapDeliveryPlan(params: {
   const resolvedDeliveryThreadId = boundDeliveryTarget.threadId ?? deliveryThreadId;
   const hasDeliveryTarget = Boolean(params.requester.origin?.channel && inferredDeliveryTo);
 
-  // Thread-bound session spawns always deliver inline to their bound thread.
-  // Run-mode spawns use stream-to-parent when the requester is a subagent
-  // orchestrator with an active heartbeat relay route. For all other run-mode
-  // spawns from non-subagent requester sessions, fall back to inline delivery
-  // so the result reaches the originating channel.
+  // OXSCI PATCH: Only inline-deliver for session-mode (thread-bound) spawns.
+  // Run-mode spawns must NOT inline-deliver — they rely on the A2A callback
+  // mechanism (agent-command.ts) which extracts delivery context from the parent
+  // session and routes through a nested parent run. Upstream's default also
+  // inline-delivers for non-subagent run-mode spawns, but that bypasses our
+  // callback threading logic and sends ACP output to the group instead of the topic.
   const useInlineDelivery =
-    hasDeliveryTarget &&
-    !params.effectiveStreamToParent &&
-    (params.spawnMode === "session" ||
-      (!params.requester.isSubagentSession && !params.requestThreadBinding));
+    hasDeliveryTarget && params.spawnMode === "session" && !params.effectiveStreamToParent;
 
   return {
     useInlineDelivery,
@@ -730,12 +728,8 @@ export async function spawnAcpDirect(
     requestedMode: params.mode,
     threadRequested: requestThreadBinding,
   });
-  if (spawnMode === "session" && !requestThreadBinding) {
-    return {
-      status: "error",
-      error: 'mode="session" requires thread=true so the ACP session can stay bound to a thread.',
-    };
-  }
+  // OXSCI PATCH: removed upstream "session requires thread=true" guard
+  // to allow persistent A2A sessions (mode=session, thread=false).
 
   const requesterState = resolveAcpSpawnRequesterState({
     cfg,
