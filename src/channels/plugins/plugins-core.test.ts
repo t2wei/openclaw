@@ -26,7 +26,7 @@ import {
   listWhatsAppDirectoryPeersFromConfig,
 } from "../../../extensions/whatsapp/src/directory-config.js";
 import type { OpenClawConfig } from "../../config/config.js";
-import type { LineProbeResult } from "../../line/types.js";
+import type { LineProbeResult } from "../../plugin-sdk/line.js";
 import { setActivePluginRegistry } from "../../plugins/runtime.js";
 import {
   createChannelTestPluginBase,
@@ -196,7 +196,6 @@ describe("channel plugin catalog", () => {
       env: {
         ...process.env,
         OPENCLAW_STATE_DIR: stateDir,
-        CLAWDBOT_STATE_DIR: undefined,
         OPENCLAW_BUNDLED_PLUGINS_DIR: "/nonexistent/bundled/plugins",
       },
     }).find((item) => item.id === "demo-channel");
@@ -273,7 +272,6 @@ describe("channel plugin catalog", () => {
       env: {
         ...process.env,
         OPENCLAW_STATE_DIR: stateDir,
-        CLAWDBOT_STATE_DIR: undefined,
       },
     }).map((entry) => entry.id);
 
@@ -326,6 +324,46 @@ describe("channel plugin catalog", () => {
 
     expect(entry?.install.npmSpec).toBe("@openclaw/whatsapp");
     expect(entry?.pluginId).toBe("whatsapp");
+  });
+
+  it("includes shipped official channel catalog entries when bundled metadata is omitted", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-official-catalog-"));
+    const catalogPath = path.join(dir, "channel-catalog.json");
+    fs.writeFileSync(
+      catalogPath,
+      JSON.stringify({
+        entries: [
+          {
+            name: "@openclaw/whatsapp",
+            openclaw: {
+              channel: {
+                id: "whatsapp",
+                label: "WhatsApp",
+                selectionLabel: "WhatsApp (QR link)",
+                detailLabel: "WhatsApp Web",
+                docsPath: "/channels/whatsapp",
+                blurb: "works with your own number; recommend a separate phone + eSIM.",
+              },
+              install: {
+                npmSpec: "@openclaw/whatsapp",
+                defaultChoice: "npm",
+              },
+            },
+          },
+        ],
+      }),
+    );
+
+    const entry = listChannelPluginCatalogEntries({
+      env: {
+        ...process.env,
+        OPENCLAW_BUNDLED_PLUGINS_DIR: "/nonexistent/bundled/plugins",
+      },
+      officialCatalogPaths: [catalogPath],
+    }).find((item) => item.id === "whatsapp");
+
+    expect(entry?.install.npmSpec).toBe("@openclaw/whatsapp");
+    expect(entry?.pluginId).toBeUndefined();
   });
 });
 

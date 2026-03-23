@@ -25,7 +25,7 @@ import {
   resolveOriginMessageProvider,
   resolveOriginMessageTo,
 } from "./origin-routing.js";
-import type { FollowupRun } from "./queue.js";
+import { refreshQueuedFollowupSession, type FollowupRun } from "./queue.js";
 import {
   applyReplyThreading,
   filterMessagingToolDuplicates,
@@ -346,6 +346,7 @@ export function createFollowupRunner(params: {
       }
 
       if (autoCompactionCount > 0) {
+        const previousSessionId = queued.run.sessionId;
         const count = await incrementRunCompactionCount({
           sessionEntry,
           sessionStore,
@@ -354,7 +355,21 @@ export function createFollowupRunner(params: {
           amount: autoCompactionCount,
           lastCallUsage: runResult.meta?.agentMeta?.lastCallUsage,
           contextTokensUsed,
+          newSessionId: runResult.meta?.agentMeta?.sessionId,
         });
+        const refreshedSessionEntry =
+          sessionKey && sessionStore ? sessionStore[sessionKey] : undefined;
+        if (refreshedSessionEntry) {
+          const queueKey = queued.run.sessionKey ?? sessionKey;
+          if (queueKey) {
+            refreshQueuedFollowupSession({
+              key: queueKey,
+              previousSessionId,
+              nextSessionId: refreshedSessionEntry.sessionId,
+              nextSessionFile: refreshedSessionEntry.sessionFile,
+            });
+          }
+        }
         if (queued.run.verboseLevel && queued.run.verboseLevel !== "off") {
           const suffix = typeof count === "number" ? ` (count ${count})` : "";
           finalPayloads.unshift({
