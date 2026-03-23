@@ -28,6 +28,7 @@ import {
   ErrorCodes,
   errorShape,
   validateSessionsAbortParams,
+  validateSessionsCancelParams,
   validateSessionsCompactParams,
   validateSessionsCreateParams,
   validateSessionsDeleteParams,
@@ -967,6 +968,37 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       sessionKey: result.key,
       reason,
     });
+  },
+  "sessions.cancel": async ({ params, respond }) => {
+    if (!assertValidParams(params, validateSessionsCancelParams, "sessions.cancel", respond)) {
+      return;
+    }
+    const p = params;
+    const key = requireSessionKey(p.key, respond);
+    if (!key) {
+      return;
+    }
+
+    const { getAcpSessionManager } = await import("../../acp/control-plane/manager.js");
+    const acpManager = getAcpSessionManager();
+    const cfg = loadConfig();
+    try {
+      await acpManager.cancelSession({
+        cfg,
+        sessionKey: key,
+        reason: typeof p.reason === "string" ? p.reason : "sessions.cancel",
+      });
+      respond(true, { ok: true, key }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.UNAVAILABLE,
+          `cancel failed: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
+    }
   },
   "sessions.delete": async ({ params, respond, client, isWebchatConnect, context }) => {
     if (!assertValidParams(params, validateSessionsDeleteParams, "sessions.delete", respond)) {

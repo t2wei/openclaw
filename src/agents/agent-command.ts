@@ -40,6 +40,7 @@ import {
   updateSessionStore,
 } from "../config/sessions.js";
 import { extractDeliveryInfo } from "../config/sessions/delivery-info.js";
+import { loadSessionStore } from "../config/sessions/store.js";
 import { resolveSessionTranscriptFile } from "../config/sessions/transcript.js";
 import {
   clearAgentRunContext,
@@ -499,6 +500,7 @@ function runAgentAttempt(params: {
     agentAccountId: params.runContext.accountId,
     messageTo: params.opts.replyTo ?? params.opts.to,
     messageThreadId: params.opts.threadId,
+    replyTargetId: params.opts.replyTargetId,
     groupId: params.runContext.groupId,
     groupChannel: params.runContext.groupChannel,
     groupSpace: params.runContext.groupSpace,
@@ -898,10 +900,17 @@ async function agentCommandInternal(
       // session's delivery context so followup delivery routes correctly
       // regardless of parent session entry mutations (race-safe).
       if (!opts.deliver && sessionEntry?.spawnedBy && finalText) {
-        // Prefer lastCallerSessionKey (set by acp_send) over spawnedBy (set at spawn).
-        // This ensures callback routes to the session that most recently communicated
-        // with this ACP session, not necessarily the original spawner.
-        const parentKey = sessionEntry.lastCallerSessionKey ?? sessionEntry.spawnedBy;
+        // Re-read from disk to pick up lastCallerSessionKey written by acp_send
+        // during this run. sessionEntry and sessionStore are stale snapshots
+        // from run start; sessions.patch writes to the gateway's own store
+        // and flushes to disk, so loadSessionStore sees the latest value.
+        const freshStore = storePath ? loadSessionStore(storePath) : undefined;
+        const freshRaw = sessionKey ? freshStore?.[sessionKey] : undefined;
+        const freshLastCaller =
+          freshRaw && typeof freshRaw === "object" && "lastCallerSessionKey" in freshRaw
+            ? freshRaw.lastCallerSessionKey
+            : undefined;
+        const parentKey = freshLastCaller ?? sessionEntry.spawnedBy;
         const acpAgent = resolveAgentIdFromSessionKey(sessionKey);
         const {
           deliveryContext: parentDelivery,

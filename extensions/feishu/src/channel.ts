@@ -495,10 +495,22 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount> = {
         if (!to) {
           throw new Error(`Feishu ${ctx.action} requires a target (to).`);
         }
-        const replyToMessageId =
-          ctx.action === "thread-reply" ? resolveFeishuMessageId(ctx.params) : undefined;
-        if (ctx.action === "thread-reply" && !replyToMessageId) {
-          throw new Error("Feishu thread-reply requires messageId.");
+        let replyToMessageId: string | undefined;
+        let replyInThread = false;
+        if (ctx.action === "thread-reply") {
+          replyToMessageId = resolveFeishuMessageId(ctx.params);
+          if (!replyToMessageId) {
+            throw new Error("Feishu thread-reply requires messageId.");
+          }
+          replyInThread = true;
+        } else {
+          // For "send", use threadId (set by resolveAutoThreadId from toolContext.replyTargetId)
+          // as reply target to keep messages within the Feishu topic thread.
+          const autoThreadId = readFirstString(ctx.params, ["threadId"]);
+          if (autoThreadId && autoThreadId.startsWith("om_")) {
+            replyToMessageId = autoThreadId;
+            replyInThread = true;
+          }
         }
         const rawCard =
           ctx.params.card && typeof ctx.params.card === "object"
@@ -520,7 +532,7 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount> = {
               card,
               accountId: ctx.accountId ?? undefined,
               replyToMessageId,
-              replyInThread: ctx.action === "thread-reply",
+              replyInThread,
             })
           : await runtime.sendMessageFeishu({
               cfg: ctx.cfg,
@@ -528,7 +540,7 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount> = {
               text: text!,
               accountId: ctx.accountId ?? undefined,
               replyToMessageId,
-              replyInThread: ctx.action === "thread-reply",
+              replyInThread,
             });
         return jsonActionResult({
           ok: true,

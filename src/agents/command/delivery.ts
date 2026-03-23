@@ -139,7 +139,9 @@ export async function deliverAgentCommandResult(params: {
   const deliveryTarget = resolved.resolvedTo;
   const resolvedThreadId = deliveryPlan.resolvedThreadId ?? opts.threadId;
   const resolvedReplyToId =
-    deliveryChannel === "slack" && resolvedThreadId != null ? String(resolvedThreadId) : undefined;
+    deliveryChannel === "slack" && resolvedThreadId != null
+      ? String(resolvedThreadId)
+      : opts.replyTargetId?.trim() || undefined;
   const resolvedThreadTarget = deliveryChannel === "slack" ? undefined : resolvedThreadId;
 
   const logDeliveryError = (err: unknown) => {
