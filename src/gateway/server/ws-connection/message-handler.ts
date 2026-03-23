@@ -539,10 +539,13 @@ export function attachGatewayWsMessageHandler(params: {
           // Shared token/password auth can bypass pairing for trusted operators.
           // Device-less clients only keep self-declared scopes on the explicit
           // allow path, including trusted token-authenticated backend operators.
+          // dangerouslyDisableDeviceAuth is the break-glass path for Control UI —
+          // preserve scopes when the operator has explicitly opted out of device identity.
           if (
             !device &&
             (decision.kind !== "allow" ||
               (!preserveInsecureLocalControlUiScopes &&
+                !controlUiAuthPolicy.allowBypass &&
                 (authMethod === "token" || authMethod === "password" || trustedProxyAuthOk)))
           ) {
             clearUnboundScopes();
