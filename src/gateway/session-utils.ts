@@ -276,63 +276,6 @@ function resolveChildSessionKeys(
   return childSessions.length > 0 ? childSessions : undefined;
 }
 
-function resolveTranscriptUsageFallback(params: {
-  cfg: OpenClawConfig;
-  key: string;
-  entry?: SessionEntry;
-  storePath: string;
-  fallbackProvider?: string;
-  fallbackModel?: string;
-}): {
-  estimatedCostUsd?: number;
-  totalTokens?: number;
-  totalTokensFresh?: boolean;
-  contextTokens?: number;
-} | null {
-  const entry = params.entry;
-  if (!entry?.sessionId) {
-    return null;
-  }
-  const parsed = parseAgentSessionKey(params.key);
-  const agentId = parsed?.agentId
-    ? normalizeAgentId(parsed.agentId)
-    : resolveDefaultAgentId(params.cfg);
-  const snapshot = readLatestSessionUsageFromTranscript(
-    entry.sessionId,
-    params.storePath,
-    entry.sessionFile,
-    agentId,
-  );
-  if (!snapshot) {
-    return null;
-  }
-  const modelProvider = snapshot.modelProvider ?? params.fallbackProvider;
-  const model = snapshot.model ?? params.fallbackModel;
-  const contextTokens = resolveContextTokensForModel({
-    cfg: params.cfg,
-    provider: modelProvider,
-    model,
-  });
-  const estimatedCostUsd = resolveEstimatedSessionCostUsd({
-    cfg: params.cfg,
-    provider: modelProvider,
-    model,
-    explicitCostUsd: snapshot.costUsd,
-    entry: {
-      inputTokens: snapshot.inputTokens,
-      outputTokens: snapshot.outputTokens,
-      cacheRead: snapshot.cacheRead,
-      cacheWrite: snapshot.cacheWrite,
-    },
-  });
-  return {
-    totalTokens: resolvePositiveNumber(snapshot.totalTokens),
-    totalTokensFresh: snapshot.totalTokensFresh === true,
-    contextTokens: resolvePositiveNumber(contextTokens),
-    estimatedCostUsd,
-  };
-}
-
 export function loadSessionEntry(sessionKey: string) {
   const cfg = loadConfig();
   const canonicalKey = resolveSessionStoreKey({ cfg, sessionKey });
@@ -1024,6 +967,7 @@ export function buildGatewaySessionRow(params: {
   now?: number;
   includeDerivedTitles?: boolean;
   includeLastMessage?: boolean;
+  ioStats?: { transcriptReads: number; cacheHits: number };
 }): GatewaySessionRow {
   const { cfg, storePath, store, key, entry } = params;
   const now = params.now ?? Date.now();
@@ -1066,42 +1010,21 @@ export function buildGatewaySessionRow(params: {
   );
   const modelProvider = resolvedModel.provider;
   const model = resolvedModel.model ?? DEFAULT_MODEL;
-  const transcriptUsage =
-    resolvePositiveNumber(resolveFreshSessionTotalTokens(entry)) === undefined ||
-    resolvePositiveNumber(entry?.contextTokens) === undefined ||
-    resolveEstimatedSessionCostUsd({
-      cfg,
-      provider: modelProvider,
-      model,
-      entry,
-    }) === undefined
-      ? resolveTranscriptUsageFallback({
-          cfg,
-          key,
-          entry,
-          storePath,
-          fallbackProvider: modelProvider,
-          fallbackModel: model,
-        })
-      : null;
-  const totalTokens =
-    resolvePositiveNumber(resolveFreshSessionTotalTokens(entry)) ??
-    resolvePositiveNumber(transcriptUsage?.totalTokens);
+  // OxSci: skip transcript fallback for usage — entry has what it has.
+  // Sessions that timed out / crashed won't have accurate usage anyway.
+  // This avoids O(N) disk reads on EFS that block the gateway event loop.
+  const totalTokens = resolvePositiveNumber(resolveFreshSessionTotalTokens(entry));
   const totalTokensFresh =
-    typeof totalTokens === "number" && Number.isFinite(totalTokens) && totalTokens > 0
-      ? true
-      : transcriptUsage?.totalTokensFresh === true;
+    typeof totalTokens === "number" && Number.isFinite(totalTokens) && totalTokens > 0;
   const childSessions = resolveChildSessionKeys(key, store);
-  const estimatedCostUsd =
-    resolveEstimatedSessionCostUsd({
-      cfg,
-      provider: modelProvider,
-      model,
-      entry,
-    }) ?? resolveNonNegativeNumber(transcriptUsage?.estimatedCostUsd);
+  const estimatedCostUsd = resolveEstimatedSessionCostUsd({
+    cfg,
+    provider: modelProvider,
+    model,
+    entry,
+  });
   const contextTokens =
     resolvePositiveNumber(entry?.contextTokens) ??
-    resolvePositiveNumber(transcriptUsage?.contextTokens) ??
     resolvePositiveNumber(
       resolveContextTokensForModel({
         cfg,
@@ -1112,12 +1035,15 @@ export function buildGatewaySessionRow(params: {
 
   let derivedTitle: string | undefined;
   let lastMessagePreview: string | undefined;
+  // Note: includeDerivedTitles/includeLastMessage trigger per-session transcript reads.
+  // sessions.list should NOT request these — only single-session detail views should.
   if (entry?.sessionId && (params.includeDerivedTitles || params.includeLastMessage)) {
     const fields = readSessionTitleFieldsFromTranscript(
       entry.sessionId,
       storePath,
       entry.sessionFile,
       sessionAgentId,
+      params.ioStats ? { ioStats: params.ioStats } : undefined,
     );
     if (params.includeDerivedTitles) {
       derivedTitle = deriveSessionTitle(entry, fields.firstUserMessage);
@@ -1214,7 +1140,13 @@ export function listSessionsFromStore(params: {
       ? Math.max(1, Math.floor(opts.activeMinutes))
       : undefined;
 
-  let sessions = Object.entries(store)
+  const ioStats = { transcriptReads: 0, cacheHits: 0 };
+  const resolvedLimit =
+    typeof opts.limit === "number" && Number.isFinite(opts.limit)
+      ? Math.max(1, Math.floor(opts.limit))
+      : undefined;
+
+  let filtered = Object.entries(store)
     .filter(([key]) => {
       if (isCronRunSessionKey(key)) {
         return false;
@@ -1251,7 +1183,17 @@ export function listSessionsFromStore(params: {
         return true;
       }
       return entry?.label === label;
-    })
+    });
+
+  // OxSci: apply limit early when no search/activeMinutes filters need full data.
+  // This bounds the number of buildGatewaySessionRow calls (which may read transcripts).
+  if (!search && activeMinutes === undefined && resolvedLimit !== undefined) {
+    filtered = filtered
+      .toSorted(([, a], [, b]) => (b?.updatedAt ?? 0) - (a?.updatedAt ?? 0))
+      .slice(0, resolvedLimit);
+  }
+
+  let sessions = filtered
     .map(([key, entry]) =>
       buildGatewaySessionRow({
         cfg,
@@ -1262,6 +1204,7 @@ export function listSessionsFromStore(params: {
         now,
         includeDerivedTitles,
         includeLastMessage,
+        ioStats,
       }),
     )
     .toSorted((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
@@ -1278,9 +1221,11 @@ export function listSessionsFromStore(params: {
     sessions = sessions.filter((s) => (s.updatedAt ?? 0) >= cutoff);
   }
 
-  if (typeof opts.limit === "number" && Number.isFinite(opts.limit)) {
-    const limit = Math.max(1, Math.floor(opts.limit));
-    sessions = sessions.slice(0, limit);
+  // Apply limit for search/activeMinutes path (early limit already handled above)
+  if (search || activeMinutes !== undefined) {
+    if (resolvedLimit !== undefined) {
+      sessions = sessions.slice(0, resolvedLimit);
+    }
   }
 
   return {
@@ -1289,5 +1234,6 @@ export function listSessionsFromStore(params: {
     count: sessions.length,
     defaults: getSessionDefaults(cfg),
     sessions,
+    ioStats,
   };
 }

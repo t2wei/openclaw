@@ -508,6 +508,13 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       result.count = result.sessions.length;
     }
 
+    // OxSci: log transcript I/O stats when file reads occur (should be 0 after optimization)
+    if (result.ioStats && result.ioStats.transcriptReads > 0) {
+      console.log(
+        `sessions.list: ${result.count} sessions, ${result.ioStats.transcriptReads} transcript reads, ${result.ioStats.cacheHits} cache hits`,
+      );
+    }
+
     respond(true, result, undefined);
   },
   "sessions.subscribe": ({ client, context, respond }) => {

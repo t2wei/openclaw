@@ -328,7 +328,10 @@ export function readSessionTitleFieldsFromTranscript(
   storePath: string | undefined,
   sessionFile?: string,
   agentId?: string,
-  opts?: { includeInterSession?: boolean },
+  opts?: {
+    includeInterSession?: boolean;
+    ioStats?: { transcriptReads: number; cacheHits: number };
+  },
 ): SessionTitleFields {
   const candidates = resolveSessionTranscriptCandidates(sessionId, storePath, sessionFile, agentId);
   const filePath = candidates.find((p) => fs.existsSync(p));
@@ -346,6 +349,9 @@ export function readSessionTitleFieldsFromTranscript(
   const cacheKey = readSessionTitleFieldsCacheKey(filePath, opts);
   const cached = getCachedSessionTitleFields(cacheKey, stat);
   if (cached) {
+    if (opts?.ioStats) {
+      opts.ioStats.cacheHits++;
+    }
     return cached;
   }
 
@@ -355,6 +361,9 @@ export function readSessionTitleFieldsFromTranscript(
     return empty;
   }
 
+  if (opts?.ioStats) {
+    opts.ioStats.transcriptReads++;
+  }
   let fd: number | null = null;
   try {
     fd = fs.openSync(filePath, "r");

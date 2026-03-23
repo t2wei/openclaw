@@ -12,12 +12,18 @@ export type GatewayAgentRow = {
   identity?: GatewayAgentIdentity;
 };
 
+export type SessionsListIoStats = {
+  transcriptReads: number;
+  cacheHits: number;
+};
+
 export type SessionsListResultBase<TDefaults, TRow> = {
   ts: number;
   path: string;
   count: number;
   defaults: TDefaults;
   sessions: TRow[];
+  ioStats?: SessionsListIoStats;
 };
 
 export type SessionsPatchResultBase<TEntry> = {

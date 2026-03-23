@@ -46,7 +46,9 @@ export async function loadSessions(
     const includeGlobal = overrides?.includeGlobal ?? state.sessionsIncludeGlobal;
     const includeUnknown = overrides?.includeUnknown ?? state.sessionsIncludeUnknown;
     const activeMinutes = overrides?.activeMinutes ?? toNumber(state.sessionsFilterActive, 0);
-    const limit = overrides?.limit ?? toNumber(state.sessionsFilterLimit, 0);
+    const DEFAULT_SESSIONS_LIMIT = 100;
+    const limit =
+      overrides?.limit ?? (toNumber(state.sessionsFilterLimit, 0) || DEFAULT_SESSIONS_LIMIT);
     const params: Record<string, unknown> = {
       includeGlobal,
       includeUnknown,
