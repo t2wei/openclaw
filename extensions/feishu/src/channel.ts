@@ -1,6 +1,5 @@
 import { describeAccountSnapshot } from "openclaw/plugin-sdk/account-helpers";
 import { formatAllowFromLowercase } from "openclaw/plugin-sdk/allow-from";
-import { createMessageToolCardSchema } from "openclaw/plugin-sdk/channel-actions";
 import {
   adaptScopedAccountAccessor,
   createHybridChannelConfigAdapter,
@@ -96,14 +95,13 @@ function describeFeishuMessageTool({
   if (listEnabledFeishuAccounts(cfg).length === 0) {
     return {
       actions: [],
-      capabilities: enabled ? ["cards"] : [],
-      schema: enabled
-        ? {
-            properties: {
-              card: createMessageToolCardSchema(),
-            },
-          }
-        : null,
+      // OXSCI PATCH: Do not expose card capability/schema to the message tool.
+      // Card rendering is an internal Feishu plugin concern — the outbound
+      // sendText handler auto-selects card mode based on content (markdown
+      // tables, code blocks). Exposing card JSON to the LLM causes 400 errors
+      // (Feishu ErrCode 200380) when the model generates invalid card JSON.
+      capabilities: [],
+      schema: null,
     };
   }
   const actions = new Set<ChannelMessageActionName>([
@@ -124,14 +122,8 @@ function describeFeishuMessageTool({
   }
   return {
     actions: Array.from(actions),
-    capabilities: enabled ? ["cards"] : [],
-    schema: enabled
-      ? {
-          properties: {
-            card: createMessageToolCardSchema(),
-          },
-        }
-      : null,
+    capabilities: [],
+    schema: null,
   };
 }
 
@@ -509,36 +501,19 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount, FeishuProbeResul
                 replyInThread = true;
               }
             }
-            const rawCard =
-              ctx.params.card && typeof ctx.params.card === "object"
-                ? (ctx.params.card as Record<string, unknown>)
-                : undefined;
-            // Treat empty card objects (e.g. `card: {}`) as "no card" so we fall
-            // through to the text path instead of sending invalid JSON to Feishu
-            // API (error 200621: parse card json err).
-            const card = rawCard && Object.keys(rawCard).length > 0 ? rawCard : undefined;
             const text = readFirstString(ctx.params, ["text", "message"]);
-            if (!card && !text) {
-              throw new Error(`Feishu ${ctx.action} requires text/message or card.`);
+            if (!text) {
+              throw new Error(`Feishu ${ctx.action} requires text/message.`);
             }
             const runtime = await loadFeishuChannelRuntime();
-            const result = card
-              ? await runtime.sendCardFeishu({
-                  cfg: ctx.cfg,
-                  to,
-                  card,
-                  accountId: ctx.accountId ?? undefined,
-                  replyToMessageId,
-                  replyInThread,
-                })
-              : await runtime.sendMessageFeishu({
-                  cfg: ctx.cfg,
-                  to,
-                  text: text!,
-                  accountId: ctx.accountId ?? undefined,
-                  replyToMessageId,
-                  replyInThread,
-                });
+            const result = await runtime.sendMessageFeishu({
+              cfg: ctx.cfg,
+              to,
+              text,
+              accountId: ctx.accountId ?? undefined,
+              replyToMessageId,
+              replyInThread,
+            });
             return jsonActionResult({
               ok: true,
               channel: "feishu",

@@ -83,6 +83,8 @@ export type SpawnAcpContext = {
   agentAccountId?: string;
   agentTo?: string;
   agentThreadId?: string | number;
+  /** Channel-specific reply target (e.g. Feishu om_ message ID) for topic routing. */
+  agentReplyTargetId?: string;
   sandboxed?: boolean;
 };
 
@@ -162,6 +164,7 @@ type AcpSpawnBootstrapDeliveryPlan = {
   accountId?: string;
   to?: string;
   threadId?: string;
+  replyTargetId?: string;
 };
 
 function resolveSpawnMode(params: {
@@ -484,6 +487,7 @@ function resolveAcpSpawnRequesterState(params: {
       accountId: params.ctx.agentAccountId,
       to: params.ctx.agentTo,
       threadId: params.ctx.agentThreadId,
+      replyTargetId: params.ctx.agentReplyTargetId,
     }),
   };
 }
@@ -668,14 +672,16 @@ function resolveAcpSpawnBootstrapDeliveryPlan(params: {
   const resolvedDeliveryThreadId = boundDeliveryTarget.threadId ?? deliveryThreadId;
   const hasDeliveryTarget = Boolean(params.requester.origin?.channel && inferredDeliveryTo);
 
-  // OXSCI PATCH: Only inline-deliver for session-mode (thread-bound) spawns.
-  // Run-mode spawns must NOT inline-deliver — they rely on the A2A callback
+  // OXSCI PATCH: Only inline-deliver for thread-bound session spawns (H2A mode).
+  // Non-thread-bound spawns (both run and session mode) rely on the A2A callback
   // mechanism (agent-command.ts) which extracts delivery context from the parent
-  // session and routes through a nested parent run. Upstream's default also
-  // inline-delivers for non-subagent run-mode spawns, but that bypasses our
-  // callback threading logic and sends ACP output to the group instead of the topic.
+  // session and routes through a nested parent run. This ensures the main agent
+  // receives codex output and can coordinate multi-agent workflows.
   const useInlineDelivery =
-    hasDeliveryTarget && params.spawnMode === "session" && !params.effectiveStreamToParent;
+    hasDeliveryTarget &&
+    params.spawnMode === "session" &&
+    params.requestThreadBinding &&
+    !params.effectiveStreamToParent;
 
   return {
     useInlineDelivery,
@@ -683,6 +689,7 @@ function resolveAcpSpawnBootstrapDeliveryPlan(params: {
     accountId: useInlineDelivery ? (params.requester.origin?.accountId ?? undefined) : undefined,
     to: useInlineDelivery ? inferredDeliveryTo : undefined,
     threadId: useInlineDelivery ? resolvedDeliveryThreadId : undefined,
+    replyTargetId: useInlineDelivery ? params.requester.origin?.replyTargetId : undefined,
   };
 }
 
@@ -868,6 +875,7 @@ export async function spawnAcpDirect(
         to: deliveryPlan.to,
         accountId: deliveryPlan.accountId,
         threadId: deliveryPlan.threadId,
+        replyTargetId: deliveryPlan.replyTargetId,
         idempotencyKey: childIdem,
         deliver: deliveryPlan.useInlineDelivery,
         label: params.label || undefined,
