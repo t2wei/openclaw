@@ -488,13 +488,15 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount, FeishuProbeResul
             let replyInThread = false;
             if (ctx.action === "thread-reply") {
               replyToMessageId = resolveFeishuMessageId(ctx.params);
-              if (!replyToMessageId) {
-                throw new Error("Feishu thread-reply requires messageId.");
+              if (replyToMessageId) {
+                replyInThread = true;
               }
-              replyInThread = true;
-            } else {
-              // For "send", use threadId (set by resolveAutoThreadId from toolContext.replyTargetId)
-              // as reply target to keep messages within the Feishu topic thread.
+              // Fallback: thread-reply without messageId → use autoThreadId (same as "send")
+            }
+            if (!replyToMessageId) {
+              // For "send" (or thread-reply fallback), use threadId set by
+              // resolveAutoThreadId from toolContext.replyTargetId (om_ format)
+              // to keep messages within the Feishu topic thread.
               const autoThreadId = readFirstString(ctx.params, ["threadId"]);
               if (autoThreadId && autoThreadId.startsWith("om_")) {
                 replyToMessageId = autoThreadId;

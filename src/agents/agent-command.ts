@@ -938,6 +938,7 @@ async function agentCommandInternal(
               "ACP callback: the following is output from an ACP agent turn.",
               `ACP agent: ${acpAgent}.`,
               `ACP session: ${sessionKey}.`,
+              ...(sessionEntry?.label ? [`ACP label: ${sessionEntry.label}.`] : []),
               "Decide how to relay this to the user.",
             ].join("\n"),
             inputProvenance: {
