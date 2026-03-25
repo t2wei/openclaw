@@ -432,6 +432,11 @@ export async function authorizeGatewayConnect(
     if ("user" in result) {
       return { ok: true, method: "trusted-proxy", user: result.user, claims: result.claims };
     }
+    // OXSCI PATCH: Allow local direct connections (e.g. ACPX child processes) to bypass
+    // trusted-proxy auth. These connections come from localhost without proxy headers.
+    if (localDirect) {
+      return { ok: true, method: "none", user: "local" };
+    }
     return { ok: false, reason: result.reason };
   }
 
