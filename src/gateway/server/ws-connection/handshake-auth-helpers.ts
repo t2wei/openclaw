@@ -60,6 +60,24 @@ export function shouldAllowSilentLocalPairing(params: {
   );
 }
 
+export function isLocalInternalGatewayClient(params: {
+  connectParams: ConnectParams;
+  isLocalClient: boolean;
+  hasBrowserOriginHeader: boolean;
+}): boolean {
+  const isGatewayBackendClient =
+    params.connectParams.client.id === GATEWAY_CLIENT_IDS.GATEWAY_CLIENT &&
+    params.connectParams.client.mode === GATEWAY_CLIENT_MODES.BACKEND;
+  const isNodeHostClient =
+    params.connectParams.client.id === GATEWAY_CLIENT_IDS.NODE_HOST &&
+    params.connectParams.client.mode === GATEWAY_CLIENT_MODES.NODE;
+  return (
+    (isGatewayBackendClient || isNodeHostClient) &&
+    params.isLocalClient &&
+    !params.hasBrowserOriginHeader
+  );
+}
+
 export function shouldSkipBackendSelfPairing(params: {
   connectParams: ConnectParams;
   isLocalClient: boolean;
@@ -67,10 +85,13 @@ export function shouldSkipBackendSelfPairing(params: {
   sharedAuthOk: boolean;
   authMethod: GatewayAuthResult["method"];
 }): boolean {
-  const isGatewayBackendClient =
-    params.connectParams.client.id === GATEWAY_CLIENT_IDS.GATEWAY_CLIENT &&
-    params.connectParams.client.mode === GATEWAY_CLIENT_MODES.BACKEND;
-  if (!isGatewayBackendClient) {
+  if (
+    !isLocalInternalGatewayClient({
+      connectParams: params.connectParams,
+      isLocalClient: params.isLocalClient,
+      hasBrowserOriginHeader: params.hasBrowserOriginHeader,
+    })
+  ) {
     return false;
   }
   const usesSharedSecretAuth = params.authMethod === "token" || params.authMethod === "password";
@@ -78,11 +99,7 @@ export function shouldSkipBackendSelfPairing(params: {
   // `authMethod === "device-token"` only reaches this helper after the caller
   // has already accepted auth (`authOk === true`), so a separate
   // `deviceTokenAuthOk` flag would be redundant here.
-  return (
-    params.isLocalClient &&
-    !params.hasBrowserOriginHeader &&
-    ((params.sharedAuthOk && usesSharedSecretAuth) || usesDeviceTokenAuth)
-  );
+  return (params.sharedAuthOk && usesSharedSecretAuth) || usesDeviceTokenAuth;
 }
 
 function resolveSignatureToken(connectParams: ConnectParams): string | null {

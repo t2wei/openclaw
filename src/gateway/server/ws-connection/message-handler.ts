@@ -89,6 +89,7 @@ import {
   resolveDeviceSignaturePayloadVersion,
   resolveHandshakeBrowserSecurityContext,
   resolveUnauthorizedHandshakeContext,
+  isLocalInternalGatewayClient,
   shouldAllowSilentLocalPairing,
   shouldSkipBackendSelfPairing,
 } from "./handshake-auth-helpers.js";
@@ -680,6 +681,11 @@ export function attachGatewayWsMessageHandler(params: {
           return;
         }
 
+        const isLocalInternalClient = isLocalInternalGatewayClient({
+          connectParams,
+          isLocalClient,
+          hasBrowserOriginHeader,
+        });
         const trustedProxyAuthOk = isTrustedProxyControlUiOperatorAuth({
           isControlUi,
           role,
@@ -688,6 +694,7 @@ export function attachGatewayWsMessageHandler(params: {
           authMethod,
         });
         const skipPairing =
+          isLocalInternalClient ||
           shouldSkipBackendSelfPairing({
             connectParams,
             isLocalClient,

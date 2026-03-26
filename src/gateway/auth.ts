@@ -432,9 +432,14 @@ export async function authorizeGatewayConnect(
     if ("user" in result) {
       return { ok: true, method: "trusted-proxy", user: result.user, claims: result.claims };
     }
-    // OXSCI PATCH: Allow local direct connections (e.g. ACPX child processes) to bypass
-    // trusted-proxy auth. These connections come from localhost without proxy headers.
-    if (localDirect) {
+    // OXSCI PATCH: Treat localhost internal backend clients as an internal lane
+    // before external auth modes. This keeps gateway-spawned ACPX/Codex clients
+    // out of trusted-proxy / token / password handshakes entirely.
+    const rawRemote = req?.socket?.remoteAddress;
+    const hasForwardedHeaders = Boolean(
+      req?.headers?.["x-forwarded-for"] || req?.headers?.["x-real-ip"],
+    );
+    if (rawRemote && isLoopbackAddress(rawRemote) && !hasForwardedHeaders) {
       return { ok: true, method: "none", user: "local" };
     }
     return { ok: false, reason: result.reason };
