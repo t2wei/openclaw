@@ -4660,6 +4660,25 @@ export const GENERATED_BUNDLED_PLUGIN_METADATA = [
               streaming: {
                 type: "boolean",
               },
+              historyPanel: {
+                type: "object",
+                properties: {
+                  title: {
+                    type: "string",
+                  },
+                  headerBackgroundColor: {
+                    type: "string",
+                  },
+                  borderColor: {
+                    type: "string",
+                  },
+                },
+                additionalProperties: false,
+              },
+              historyPanelScope: {
+                type: "string",
+                enum: ["tool", "all"],
+              },
               tools: {
                 type: "object",
                 properties: {
@@ -5215,6 +5234,25 @@ export const GENERATED_BUNDLED_PLUGIN_METADATA = [
                     },
                     streaming: {
                       type: "boolean",
+                    },
+                    historyPanel: {
+                      type: "object",
+                      properties: {
+                        title: {
+                          type: "string",
+                        },
+                        headerBackgroundColor: {
+                          type: "string",
+                        },
+                        borderColor: {
+                          type: "string",
+                        },
+                      },
+                      additionalProperties: false,
+                    },
+                    historyPanelScope: {
+                      type: "string",
+                      enum: ["tool", "all"],
                     },
                     tools: {
                       type: "object",
