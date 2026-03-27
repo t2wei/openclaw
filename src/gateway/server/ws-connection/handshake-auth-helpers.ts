@@ -3,7 +3,6 @@ import type { AuthRateLimiter } from "../../auth-rate-limit.js";
 import type { GatewayAuthResult } from "../../auth.js";
 import { buildDeviceAuthPayload, buildDeviceAuthPayloadV3 } from "../../device-auth.js";
 import { isLoopbackAddress } from "../../net.js";
-import { GATEWAY_CLIENT_IDS, GATEWAY_CLIENT_MODES } from "../../protocol/client-info.js";
 import type { ConnectParams } from "../../protocol/index.js";
 import type { AuthProvidedKind } from "./auth-messages.js";
 
@@ -103,6 +102,7 @@ export function shouldSkipBackendSelfPairing(params: {
   // `deviceTokenAuthOk` flag would be redundant here.
   return (params.sharedAuthOk && usesSharedSecretAuth) || usesDeviceTokenAuth;
 }
+
 
 function resolveSignatureToken(connectParams: ConnectParams): string | null {
   return (

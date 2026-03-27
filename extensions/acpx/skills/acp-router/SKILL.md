@@ -1,29 +1,64 @@
 ---
 name: acp-router
-description: Route requests for Codex, Claude Code, Pi, OpenCode, Gemini CLI, or Kimi into OpenClaw ACP runtime sessions. Use `sessions_spawn` to create sessions and `acp_send` for follow-ups.
+description: Route plain-language requests for Pi, Claude Code, Codex, Cursor, Copilot, OpenClaw ACP, OpenCode, Gemini CLI, Qwen, Kiro, Kimi, iFlow, Factory Droid, Kilocode, or ACP harness work into either OpenClaw ACP runtime sessions or direct acpx-driven sessions ("telephone game" flow). For coding-agent thread requests, read this skill first, then use only `sessions_spawn` for thread creation.
 user-invocable: false
 ---
 
 # ACP Harness Router
 
-When user intent is "run this in Codex/Claude Code/Pi/OpenCode/Gemini/Kimi (ACP harness)", route through ACP runtime. Do not use subagent runtime or PTY scraping.
+When user intent is "run this in Pi/Claude Code/Codex/Cursor/Copilot/OpenClaw/OpenCode/Gemini/Qwen/Kiro/Kimi/iFlow/Droid/Kilocode (ACP harness)", do not use subagent runtime or PTY scraping. Route through ACP-aware flows.
 
 ## Intent detection
 
 Trigger this skill when the user asks to:
 
-- run something in Codex / Claude Code / Pi / OpenCode / Gemini / Kimi
+- run something in Pi / Claude Code / Codex / Cursor / Copilot / OpenClaw / OpenCode / Gemini / Qwen / Kiro / Kimi / iFlow / Droid / Kilocode
 - continue existing harness work
 - relay instructions to an external coding harness
+- keep an external harness conversation in a thread-like conversation
+
+Mandatory preflight for coding-agent thread requests:
+
+- Before creating any thread for ACP harness work, read this skill first in the same turn.
+- After reading, follow `OpenClaw ACP runtime path` below; do not use `message(action="thread-create")` for ACP harness thread spawn.
+
+## Mode selection
+
+Choose one of these paths:
+
+1. OpenClaw ACP runtime path (default): use `sessions_spawn` / ACP runtime tools.
+2. Direct `acpx` path (telephone game): use `acpx` CLI through `exec` to drive the harness session directly.
+
+Use direct `acpx` when one of these is true:
+
+- user explicitly asks for direct `acpx` driving
+- ACP runtime/plugin path is unavailable or unhealthy
+- the task is "just relay prompts to harness" and no OpenClaw ACP lifecycle features are needed
+
+Do not use:
+
+- `subagents` runtime for harness control
+- `/acp` command delegation as a requirement for the user
+- PTY scraping of supported ACP harness CLIs when `acpx` is available
 
 ## AgentId mapping
 
-- "codex" -> `agentId: "codex"`
-- "claude" or "claude code" -> `agentId: "claude"`
+Use these defaults when user names a harness directly:
+
 - "pi" -> `agentId: "pi"`
+- "openclaw" -> `agentId: "openclaw"`
+- "claude" or "claude code" -> `agentId: "claude"`
+- "codex" -> `agentId: "codex"`
+- "copilot" or "github copilot" -> `agentId: "copilot"`
+- "cursor" or "cursor cli" -> `agentId: "cursor"`
+- "droid" or "factory droid" -> `agentId: "droid"`
 - "opencode" -> `agentId: "opencode"`
 - "gemini" or "gemini cli" -> `agentId: "gemini"`
+- "iflow" -> `agentId: "iflow"`
+- "kilocode" -> `agentId: "kilocode"`
 - "kimi" or "kimi cli" -> `agentId: "kimi"`
+- "kiro" or "kiro cli" -> `agentId: "kiro"`
+- "qwen" or "qwen code" -> `agentId: "qwen"`
 
 If policy rejects the chosen id, report the error and ask the user for the allowed ACP agent id.
 

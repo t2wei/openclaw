@@ -22,6 +22,13 @@ const FOLLOWUP_RUN_CALLBACKS = resolveGlobalMap<string, (run: FollowupRun) => Pr
   FOLLOWUP_DRAIN_CALLBACKS_KEY,
 );
 
+export function rememberFollowupDrainCallback(
+  key: string,
+  runFollowup: (run: FollowupRun) => Promise<void>,
+): void {
+  FOLLOWUP_RUN_CALLBACKS.set(key, runFollowup);
+}
+
 export function clearFollowupDrainCallback(key: string): void {
   FOLLOWUP_RUN_CALLBACKS.delete(key);
 }
@@ -79,20 +86,17 @@ export function scheduleFollowupDrain(
   key: string,
   runFollowup: (run: FollowupRun) => Promise<void>,
 ): void {
-  // Always cache the callback so kickFollowupDrainIfIdle can restart a drain
-  // when a message is enqueued while a run is active (e.g. user message during
-  // ACP callback loop).  Upstream b645654923 moved this below beginQueueDrain
-  // to avoid stale callbacks, but that prevents kickFollowupDrainIfIdle from
-  // ever starting a drain when the initial finalizeWithFollowup call found an
-  // empty queue — stranding messages permanently.  The staleness concern is
-  // benign: the callback wraps runEmbeddedPiAgent and most parameters come
-  // from the FollowupRun item, not the closure.
-  // Ref: upstream 60130203e1 (original fix) → b645654923 (regression).
+  // Cache the callback eagerly so kickFollowupDrainIfIdle can restart a drain
+  // when a message is enqueued while a run is active.
   FOLLOWUP_RUN_CALLBACKS.set(key, runFollowup);
   const queue = beginQueueDrain(FOLLOWUP_QUEUES, key);
   if (!queue) {
     return;
   }
+  const effectiveRunFollowup = FOLLOWUP_RUN_CALLBACKS.get(key) ?? runFollowup;
+  // Cache callback only when a drain actually starts. Avoid keeping stale
+  // callbacks around from finalize calls where no queue work is pending.
+  rememberFollowupDrainCallback(key, effectiveRunFollowup);
   void (async () => {
     try {
       const collectState = { forceIndividualCollect: false };
@@ -111,7 +115,7 @@ export function scheduleFollowupDrain(
             collectState,
             isCrossChannel,
             items: queue.items,
-            run: runFollowup,
+            run: effectiveRunFollowup,
           });
           if (collectDrainResult === "empty") {
             break;
@@ -135,7 +139,7 @@ export function scheduleFollowupDrain(
             summary,
             renderItem: (item, idx) => `---\nQueued #${idx + 1}\n${item.prompt}`.trim(),
           });
-          await runFollowup({
+          await effectiveRunFollowup({
             prompt,
             run,
             enqueuedAt: Date.now(),
@@ -156,7 +160,7 @@ export function scheduleFollowupDrain(
           }
           if (
             !(await drainNextQueueItem(queue.items, async (item) => {
-              await runFollowup({
+              await effectiveRunFollowup({
                 prompt: summaryPrompt,
                 run,
                 enqueuedAt: Date.now(),
@@ -173,7 +177,7 @@ export function scheduleFollowupDrain(
           continue;
         }
 
-        if (!(await drainNextQueueItem(queue.items, runFollowup))) {
+        if (!(await drainNextQueueItem(queue.items, effectiveRunFollowup))) {
           break;
         }
       }
@@ -184,8 +188,9 @@ export function scheduleFollowupDrain(
       queue.draining = false;
       if (queue.items.length === 0 && queue.droppedCount === 0) {
         FOLLOWUP_QUEUES.delete(key);
+        clearFollowupDrainCallback(key);
       } else {
-        scheduleFollowupDrain(key, runFollowup);
+        scheduleFollowupDrain(key, effectiveRunFollowup);
       }
     }
   })();

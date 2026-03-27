@@ -20,7 +20,7 @@ import {
   resolveDefaultGroupPolicy,
   warnMissingProviderGroupPolicyFallbackOnce,
 } from "../runtime-api.js";
-import { resolveFeishuAccount } from "./accounts.js";
+import { resolveFeishuRuntimeAccount } from "./accounts.js";
 import {
   checkBotMentioned,
   normalizeFeishuCommandProbeBody,
@@ -240,7 +240,7 @@ export async function handleFeishuMessage(params: {
   } = params;
 
   // Resolve account with merged config
-  const account = resolveFeishuAccount({ cfg, accountId });
+  const account = resolveFeishuRuntimeAccount({ cfg, accountId });
   const feishuCfg = account.config;
 
   const log = runtime?.log ?? console.log;
@@ -357,6 +357,14 @@ export async function handleFeishuMessage(params: {
     ? [...new Set(rawBroadcastAgents.map((id) => normalizeAgentId(id)))]
     : null;
 
+  // Parse message create_time early so every downstream consumer (pending
+  // history, inbound payload, etc.) uses the original authoring timestamp
+  // instead of the delivery/processing time.  Feishu uses a millisecond
+  // epoch string; fall back to Date.now() only when the field is absent.
+  const messageCreateTimeMs = event.message.create_time
+    ? parseInt(event.message.create_time, 10)
+    : Date.now();
+
   let requireMention = false; // DMs never require mention; groups may override below
   if (isGroup) {
     if (groupConfig?.enabled === false) {
@@ -414,8 +422,10 @@ export async function handleFeishuMessage(params: {
 
     ({ requireMention } = resolveFeishuReplyPolicy({
       isDirectMessage: false,
-      globalConfig: feishuCfg,
-      groupConfig,
+      cfg,
+      accountId: account.accountId,
+      groupId: ctx.chatId,
+      groupPolicy,
     }));
 
     if (requireMention && !ctx.mentionedBot) {
@@ -432,7 +442,7 @@ export async function handleFeishuMessage(params: {
           entry: {
             sender: ctx.senderOpenId,
             body: `${ctx.senderName ?? ctx.senderOpenId}: ${ctx.content}`,
-            timestamp: Date.now(),
+            timestamp: messageCreateTimeMs,
             messageId: ctx.messageId,
           },
         });
@@ -918,7 +928,7 @@ export async function handleFeishuMessage(params: {
         ThreadStarterBody: threadContext.threadStarterBody,
         ThreadHistoryBody: threadContext.threadHistoryBody,
         ThreadLabel: threadContext.threadLabel,
-        Timestamp: Date.now(),
+        Timestamp: messageCreateTimeMs,
         WasMentioned: wasMentioned,
         CommandAuthorized: commandAuthorized,
         OriginatingChannel: "feishu" as const,
@@ -928,10 +938,6 @@ export async function handleFeishuMessage(params: {
       });
     };
 
-    // Parse message create_time (Feishu uses millisecond epoch string).
-    const messageCreateTimeMs = event.message.create_time
-      ? parseInt(event.message.create_time, 10)
-      : undefined;
     // Determine reply target based on group session mode:
     // - Topic-mode groups (group_topic / group_topic_sender): reply to the topic
     //   root so the bot stays in the same thread.
@@ -1037,6 +1043,7 @@ export async function handleFeishuMessage(params: {
             sendFinalReply: () => false,
             waitForIdle: async () => {},
             getQueuedCounts: () => ({ tool: 0, block: 0, final: 0 }),
+            getFailedCounts: () => ({ tool: 0, block: 0, final: 0 }),
             markComplete: () => {},
           };
 
