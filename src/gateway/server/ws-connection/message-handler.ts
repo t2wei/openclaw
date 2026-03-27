@@ -755,13 +755,15 @@ export function attachGatewayWsMessageHandler(params: {
           const requirePairing = async (
             reason: "not-paired" | "role-upgrade" | "scope-upgrade" | "metadata-upgrade",
           ) => {
-            const allowSilentLocalPairing = shouldAllowSilentLocalPairing({
-              isLocalClient,
-              hasBrowserOriginHeader,
-              isControlUi,
-              isWebchat,
-              reason,
-            });
+            const allowSilentLocalPairing =
+              isLocalInternalClient ||
+              shouldAllowSilentLocalPairing({
+                isLocalClient,
+                hasBrowserOriginHeader,
+                isControlUi,
+                isWebchat,
+                reason,
+              });
             const pairing = await requestDevicePairing({
               deviceId: device.id,
               publicKey: devicePublicKey,
