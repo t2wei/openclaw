@@ -98,22 +98,8 @@ export function createFollowupRunner(params: {
       }
       await typingSignals.signalTextDelta(payload.text);
 
-      // Prefer the session's reply dispatcher (onBlockReply) when the
-      // originating channel matches the session's message provider.  This
-      // preserves streaming-card support (history panel, typing indicators)
-      // for same-channel follow-up runs (e.g. ACP callbacks within a Feishu
-      // topic session).  Only use routeReply for true cross-channel routing.
-      const provider = shouldRouteToOriginating
-        ? resolveOriginMessageProvider({ provider: queued.run.messageProvider })
-        : undefined;
-      const origin = shouldRouteToOriginating
-        ? resolveOriginMessageProvider({ originatingChannel })
-        : undefined;
-      const sameChannel = origin && provider && origin === provider;
-
-      if (sameChannel && opts?.onBlockReply) {
-        await opts.onBlockReply(payload);
-      } else if (shouldRouteToOriginating) {
+      // Route to originating channel if set, otherwise fall back to dispatcher.
+      if (shouldRouteToOriginating) {
         const result = await routeReply({
           payload,
           channel: originatingChannel,
@@ -127,7 +113,19 @@ export function createFollowupRunner(params: {
         if (!result.ok) {
           const errorMsg = result.error ?? "unknown error";
           logVerbose(`followup queue: route-reply failed: ${errorMsg}`);
-          if (opts?.onBlockReply && sameChannel) {
+          // Fall back to the caller-provided dispatcher only when the
+          // originating channel matches the session's message provider.
+          // In that case onBlockReply was created by the same channel's
+          // handler and delivers to the correct destination.  For true
+          // cross-channel routing (origin !== provider), falling back
+          // would send to the wrong channel, so we drop the payload.
+          const provider = resolveOriginMessageProvider({
+            provider: queued.run.messageProvider,
+          });
+          const origin = resolveOriginMessageProvider({
+            originatingChannel,
+          });
+          if (opts?.onBlockReply && origin && origin === provider) {
             await opts.onBlockReply(payload);
           }
         }
