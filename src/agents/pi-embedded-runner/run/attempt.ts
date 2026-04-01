@@ -873,8 +873,28 @@ export async function runEmbeddedAttempt(
         // streamAnthropic for GCP IAM auth instead of Anthropic API keys.
         activeSession.agent.streamFn = createAnthropicVertexStreamFnForModel(params.model);
       } else {
-        // Force a stable streamFn reference so vitest can reliably mock @mariozechner/pi-ai.
-        activeSession.agent.streamFn = streamSimple;
+        // Wrap streamSimple to inject auth from the model registry, matching
+        // the SDK's createAgentSession wrapper in sdk.js.  Without this,
+        // custom providers (e.g. custom-llm-*) whose API keys live only in
+        // the runtime auth storage would fail with "No API key for provider".
+        const modelRegistry = params.modelRegistry;
+        if (modelRegistry?.getApiKeyAndHeaders) {
+          activeSession.agent.streamFn = async (model, context, options) => {
+            const auth = await modelRegistry.getApiKeyAndHeaders(model);
+            if (auth.ok) {
+              return streamSimple(model, context, {
+                ...options,
+                apiKey: auth.apiKey ?? options?.apiKey,
+                headers: auth.headers || options?.headers
+                  ? { ...auth.headers, ...options?.headers }
+                  : undefined,
+              });
+            }
+            return streamSimple(model, context, options);
+          };
+        } else {
+          activeSession.agent.streamFn = streamSimple;
+        }
       }
 
       const { effectiveExtraParams } = applyExtraParamsToAgent(

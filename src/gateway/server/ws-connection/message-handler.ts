@@ -695,13 +695,6 @@ export function attachGatewayWsMessageHandler(params: {
         });
         const skipPairing =
           isLocalInternalClient ||
-          shouldSkipBackendSelfPairing({
-            connectParams,
-            isLocalClient,
-            hasBrowserOriginHeader,
-            sharedAuthOk,
-            authMethod,
-          }) ||
           shouldSkipControlUiPairing(
             controlUiAuthPolicy,
             role,

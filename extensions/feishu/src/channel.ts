@@ -543,6 +543,10 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount, FeishuProbeResul
             }
             const text = readFirstString(ctx.params, ["text", "message"]);
             const mediaUrl = readFeishuMediaParam(ctx.params);
+            const card =
+              ctx.params.card && typeof ctx.params.card === "object"
+                ? (ctx.params.card as Record<string, unknown>)
+                : undefined;
             if (card && mediaUrl) {
               throw new Error(`Feishu ${ctx.action} does not support card with media.`);
             }

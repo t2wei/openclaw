@@ -3,6 +3,7 @@ import type { AuthRateLimiter } from "../../auth-rate-limit.js";
 import type { GatewayAuthResult } from "../../auth.js";
 import { buildDeviceAuthPayload, buildDeviceAuthPayloadV3 } from "../../device-auth.js";
 import { isLoopbackAddress } from "../../net.js";
+import { GATEWAY_CLIENT_IDS, GATEWAY_CLIENT_MODES } from "../../protocol/client-info.js";
 import type { ConnectParams } from "../../protocol/index.js";
 import type { AuthProvidedKind } from "./auth-messages.js";
 
@@ -77,30 +78,6 @@ export function isLocalInternalGatewayClient(params: {
     params.isLocalClient &&
     !params.hasBrowserOriginHeader
   );
-}
-
-export function shouldSkipBackendSelfPairing(params: {
-  connectParams: ConnectParams;
-  isLocalClient: boolean;
-  hasBrowserOriginHeader: boolean;
-  sharedAuthOk: boolean;
-  authMethod: GatewayAuthResult["method"];
-}): boolean {
-  if (
-    !isLocalInternalGatewayClient({
-      connectParams: params.connectParams,
-      isLocalClient: params.isLocalClient,
-      hasBrowserOriginHeader: params.hasBrowserOriginHeader,
-    })
-  ) {
-    return false;
-  }
-  const usesSharedSecretAuth = params.authMethod === "token" || params.authMethod === "password";
-  const usesDeviceTokenAuth = params.authMethod === "device-token";
-  // `authMethod === "device-token"` only reaches this helper after the caller
-  // has already accepted auth (`authOk === true`), so a separate
-  // `deviceTokenAuthOk` flag would be redundant here.
-  return (params.sharedAuthOk && usesSharedSecretAuth) || usesDeviceTokenAuth;
 }
 
 
