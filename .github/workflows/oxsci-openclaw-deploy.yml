@@ -7,6 +7,14 @@ on:
         description: "Force deploy even if image unchanged"
         type: boolean
         default: false
+      cpu:
+        description: "CPU units (256, 512, 1024, 2048, 4096). Leave empty to keep current."
+        type: string
+        default: ""
+      memory:
+        description: "Memory MB (512, 1024, 2048, 3072, 4096, 8192, 16384). Leave empty to keep current."
+        type: string
+        default: ""
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -86,6 +94,14 @@ jobs:
 
           # Update image
           container['image'] = '${{ steps.version.outputs.image }}'
+
+          # Override CPU/Memory if specified
+          cpu_override = '${{ inputs.cpu }}'.strip()
+          memory_override = '${{ inputs.memory }}'.strip()
+          if cpu_override:
+              td['cpu'] = cpu_override
+          if memory_override:
+              td['memory'] = memory_override
 
           # Run as node user (uid 1000), consistent with EFS file ownership
           container['user'] = 'node'
