@@ -3,7 +3,8 @@
  */
 
 import type { Client } from "@larksuiteoapi/node-sdk";
-import { fetchWithSsrFGuard } from "../runtime-api.js";
+import { fetchWithSsrFGuard } from "openclaw/plugin-sdk/ssrf-runtime";
+import { getFeishuUserAgent } from "./client.js";
 import { resolveFeishuCardTemplate, type CardHeaderConfig } from "./send.js";
 import type { FeishuDomain } from "./types.js";
 
@@ -17,7 +18,7 @@ type CardState = {
 };
 
 /** Options for customising the initial streaming card appearance. */
-export type StreamingCardOptions = {
+type StreamingCardOptions = {
   /** Optional header with title and color template. */
   header?: CardHeaderConfig;
   /** Optional grey note footer text. */
@@ -25,7 +26,7 @@ export type StreamingCardOptions = {
 };
 
 /** Optional header for streaming cards (title bar with color template) */
-export type StreamingCardHeader = {
+type StreamingCardHeader = {
   title: string;
   /** Color template: blue, green, red, orange, purple, indigo, wathet, turquoise, yellow, grey, carmine, violet, lime */
   template?: string;
@@ -37,6 +38,9 @@ type StreamingStartOptions = {
   rootId?: string;
   header?: StreamingCardHeader;
 };
+
+const STREAMING_UPDATE_THROTTLE_MS = 160;
+const STREAMING_SIGNIFICANT_DELTA_CHARS = 18;
 
 // Token cache (keyed by domain + appId)
 const tokenCache = new Map<string, { token: string; expiresAt: number }>();
@@ -76,7 +80,7 @@ async function getToken(creds: Credentials): Promise<string> {
     url: `${resolveApiBase(creds.domain)}/auth/v3/tenant_access_token/internal`,
     init: {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "User-Agent": getFeishuUserAgent() },
       body: JSON.stringify({ app_id: creds.appId, app_secret: creds.appSecret }),
     },
     policy: { allowedHostnames: resolveAllowedHostnames(creds.domain) },
@@ -109,6 +113,20 @@ function truncateSummary(text: string, max = 50): string {
   }
   const clean = text.replace(/\n/g, " ").trim();
   return clean.length <= max ? clean : clean.slice(0, max - 3) + "...";
+}
+
+function hasNaturalStreamingBoundary(text: string): boolean {
+  return /[\n。！？!?；;：:]$/.test(text);
+}
+
+function shouldPushStreamingUpdate(previousText: string, nextText: string): boolean {
+  if (!previousText) {
+    return true;
+  }
+  if (hasNaturalStreamingBoundary(nextText)) {
+    return true;
+  }
+  return nextText.length - previousText.length >= STREAMING_SIGNIFICANT_DELTA_CHARS;
 }
 
 export function mergeStreamingText(
@@ -168,7 +186,7 @@ export class FeishuStreamingSession {
   private lastUpdateTime = 0;
   private pendingText: string | null = null;
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
-  private updateThrottleMs = 100; // Throttle updates to max 10/sec
+  private updateThrottleMs = STREAMING_UPDATE_THROTTLE_MS;
 
   constructor(client: Client, creds: Credentials, log?: (msg: string) => void) {
     this.client = client;
@@ -221,6 +239,7 @@ export class FeishuStreamingSession {
         headers: {
           Authorization: `Bearer ${await getToken(this.creds)}`,
           "Content-Type": "application/json",
+          "User-Agent": getFeishuUserAgent(),
         },
         body: JSON.stringify({ type: "card_json", data: JSON.stringify(cardJson) }),
       },
@@ -305,6 +324,7 @@ export class FeishuStreamingSession {
         headers: {
           Authorization: `Bearer ${await getToken(this.creds)}`,
           "Content-Type": "application/json",
+          "User-Agent": getFeishuUserAgent(),
         },
         body: JSON.stringify({
           content: text,
@@ -321,45 +341,59 @@ export class FeishuStreamingSession {
       .catch((error) => onError?.(error));
   }
 
-  async update(text: string, options?: { replace?: boolean }): Promise<void> {
-    if (!this.state || this.closed) {
-      return;
-    }
-    // replace mode: set card content directly without merging with previous text.
-    // Used for narration blocks and final text where the new content should
-    // completely replace whatever is currently displayed.
-    const resolvedInput = options?.replace
-      ? text
-      : mergeStreamingText(this.pendingText ?? this.state.currentText, text);
-    if (!resolvedInput || resolvedInput === this.state.currentText) {
-      return;
-    }
-
-    // Throttle: skip if updated recently, but remember pending text
-    const now = Date.now();
-    if (now - this.lastUpdateTime < this.updateThrottleMs) {
-      this.pendingText = resolvedInput;
-      return;
-    }
-    this.pendingText = null;
-    this.lastUpdateTime = now;
+  private clearFlushTimer(): void {
     if (this.flushTimer) {
       clearTimeout(this.flushTimer);
       this.flushTimer = null;
     }
+  }
+
+  private schedulePendingFlush(): void {
+    if (this.flushTimer || !this.pendingText || this.closed) {
+      return;
+    }
+    const delayMs = Math.max(0, this.updateThrottleMs - (Date.now() - this.lastUpdateTime));
+    this.flushTimer = setTimeout(() => {
+      this.flushTimer = null;
+      const pending = this.pendingText;
+      if (!pending || this.closed) {
+        return;
+      }
+      void this.update(pending);
+    }, delayMs);
+  }
+
+  async update(text: string): Promise<void> {
+    if (!this.state || this.closed) {
+      return;
+    }
+    const mergedInput = mergeStreamingText(this.pendingText ?? this.state.currentText, text);
+    if (!mergedInput || mergedInput === this.state.currentText) {
+      return;
+    }
+    this.pendingText = mergedInput;
+    this.clearFlushTimer();
+
+    const shouldForceUpdate = shouldPushStreamingUpdate(this.state.currentText, mergedInput);
+    const now = Date.now();
+    if (!shouldForceUpdate && now - this.lastUpdateTime < this.updateThrottleMs) {
+      this.schedulePendingFlush();
+      return;
+    }
+    this.lastUpdateTime = now;
 
     this.queue = this.queue.then(async () => {
       if (!this.state || this.closed) {
         return;
       }
-      const finalContent = options?.replace
-        ? resolvedInput
-        : mergeStreamingText(this.state.currentText, resolvedInput);
-      if (!finalContent || finalContent === this.state.currentText) {
+      const nextText = this.pendingText ?? mergedInput;
+      const mergedText = mergeStreamingText(this.state.currentText, nextText);
+      if (!mergedText || mergedText === this.state.currentText) {
         return;
       }
-      this.state.currentText = finalContent;
-      await this.updateCardContent(finalContent, (e) => this.log?.(`Update failed: ${String(e)}`));
+      this.pendingText = null;
+      this.state.currentText = mergedText;
+      await this.updateCardContent(mergedText, (e) => this.log?.(`Update failed: ${String(e)}`));
     });
     await this.queue;
   }
@@ -377,6 +411,7 @@ export class FeishuStreamingSession {
         headers: {
           Authorization: `Bearer ${await getToken(this.creds)}`,
           "Content-Type": "application/json",
+          "User-Agent": getFeishuUserAgent(),
         },
         body: JSON.stringify({
           content: `<font color='grey'>${note}</font>`,
@@ -410,10 +445,7 @@ export class FeishuStreamingSession {
       return;
     }
     this.closed = true;
-    if (this.flushTimer) {
-      clearTimeout(this.flushTimer);
-      this.flushTimer = null;
-    }
+    this.clearFlushTimer();
     await this.queue;
 
     // When finalText is provided, use it directly — it is the definitive card
