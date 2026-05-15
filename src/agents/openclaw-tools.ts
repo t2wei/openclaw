@@ -292,6 +292,7 @@ export function createOpenClawTools(
     : createMessageTool({
         agentAccountId: options?.agentAccountId,
         agentSessionKey: options?.agentSessionKey,
+        agentId: sessionAgentId,
         sessionId: options?.sessionId,
         config: options?.config,
         currentChannelId: options?.currentChannelId,
@@ -423,6 +424,8 @@ export function createOpenClawTools(
             config: resolvedConfig,
             requesterAgentIdOverride: options?.requesterAgentIdOverride,
             workspaceDir: spawnWorkspaceDir,
+            inheritedToolAllowlist: options?.inheritedToolAllowlist,
+            inheritedToolDenylist: options?.inheritedToolDenylist,
           }),
         ]),
     createSessionsYieldTool({

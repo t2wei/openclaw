@@ -4,6 +4,7 @@ import { type ChildProcess, spawn, type SpawnOptionsWithoutStdio } from "node:ch
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 type CommandResult = {
   stderr: string;
@@ -11,6 +12,8 @@ type CommandResult = {
 };
 
 type JsonObject = Record<string, unknown>;
+
+type PreviewCrop = "telegram-window";
 
 type CrabboxInspect = {
   host?: string;
@@ -23,7 +26,17 @@ type CrabboxInspect = {
 };
 
 type Options = {
-  command: "finish" | "probe" | "publish" | "run" | "screenshot" | "send" | "start" | "status";
+  crabboxClass: string;
+  command:
+    | "finish"
+    | "probe"
+    | "publish"
+    | "run"
+    | "screenshot"
+    | "send"
+    | "start"
+    | "status"
+    | "view";
   crabboxBin: string;
   desktopChatTitle: string;
   dryRun: boolean;
@@ -33,13 +46,20 @@ type Options = {
   idleTimeout: string;
   keepBox: boolean;
   leaseId?: string;
+  mockResponseText: string;
   mockPort: number;
   outputDir: string;
+  messageId?: string;
+  previewCrop?: PreviewCrop;
+  previewFps: number;
+  previewCropWidth: number;
+  previewWidth: number;
   provider: string;
   publishFullArtifacts: boolean;
   publishPr?: number;
   publishRepo: string;
   publishSummary?: string;
+  recordFps: number;
   recordSeconds: number;
   remoteCommand: string[];
   sessionFile?: string;
@@ -75,6 +95,7 @@ type SessionFile = {
   command: "telegram-user-crabbox-session";
   createdAt: string;
   crabbox: {
+    class: string;
     createdLease: boolean;
     id: string;
     inspect: CrabboxInspect;
@@ -110,9 +131,17 @@ type SessionFile = {
 
 const DEFAULT_SKILL_DIR = "~/.codex/skills/custom/telegram-e2e-bot-to-bot";
 const DEFAULT_CONVEX_ENV_FILE = `${DEFAULT_SKILL_DIR}/convex.local.env`;
-const DEFAULT_USER_DRIVER = `${DEFAULT_SKILL_DIR}/scripts/user-driver.py`;
+const DEFAULT_USER_DRIVER = "scripts/e2e/telegram-user-driver.py";
 const DEFAULT_OUTPUT_ROOT = ".artifacts/qa-e2e/telegram-user-crabbox";
 const REMOTE_ROOT = "/tmp/openclaw-telegram-user-crabbox";
+const CREDENTIAL_SCRIPT = fileURLToPath(new URL("./telegram-user-credential.ts", import.meta.url));
+const TELEGRAM_PROOF_VIEW = {
+  cropWidth: 520,
+  height: 1000,
+  width: 650,
+  x: 635,
+  y: 40,
+};
 
 function usageText() {
   return [
@@ -121,17 +150,26 @@ function usageText() {
     "  node --import tsx scripts/e2e/telegram-user-crabbox-proof.ts start [--tdlib-url <url>]",
     "  node --import tsx scripts/e2e/telegram-user-crabbox-proof.ts send --session <session.json> --text <text>",
     "  node --import tsx scripts/e2e/telegram-user-crabbox-proof.ts run --session <session.json> -- <remote command>",
+    "  node --import tsx scripts/e2e/telegram-user-crabbox-proof.ts view --session <session.json> --message-id <id>",
     "  node --import tsx scripts/e2e/telegram-user-crabbox-proof.ts screenshot --session <session.json>",
     "  node --import tsx scripts/e2e/telegram-user-crabbox-proof.ts status --session <session.json>",
     "  node --import tsx scripts/e2e/telegram-user-crabbox-proof.ts finish --session <session.json>",
     "  node --import tsx scripts/e2e/telegram-user-crabbox-proof.ts publish --session <session.json> --pr <number>",
     "",
     "Useful options:",
+    "  --class <name>                Crabbox machine class. Default: standard.",
     "  --desktop-chat-title <name>   Telegram Desktop chat to select before recording.",
     "  --id <cbx_id>                 Reuse an existing Crabbox desktop lease.",
     "  --keep-box                    Leave the Crabbox lease running for VNC debugging.",
+    "  --mock-response-file <path>    Text returned by the mock model.",
     "  --output-dir <path>           Artifact directory under the repo.",
+    "  --message-id <id>             Telegram message id for proof-view deep link.",
+    "  --preview-crop telegram-window Create a side-by-side friendly Telegram-window GIF.",
+    "  --preview-crop-width <pixels>  Cropped preview GIF width. Default: 520.",
+    "  --preview-fps <fps>            Motion GIF frames per second. Default: 24.",
+    "  --preview-width <pixels>       Motion GIF width. Default: 1920.",
     "  --pr <number>                 Pull request number for publish.",
+    "  --record-fps <fps>             Desktop recording frames per second. Default: 24.",
     "  --record-seconds <seconds>    Desktop video duration. Default: 35.",
     "  --repo <owner/name>           GitHub repo for publish. Default: openclaw/openclaw.",
     "  --session <path>              Session file from start. Default: <output-dir>/session.json.",
@@ -181,10 +219,12 @@ function parseArgs(argv: string[]): Options {
     "send",
     "start",
     "status",
+    "view",
   ]);
   const command = commands.has(argv[0] ?? "") ? (argv.shift() as Options["command"]) : "probe";
   const stamp = new Date().toISOString().replace(/[:.]/gu, "-");
   const opts: Options = {
+    crabboxClass: "standard",
     command,
     crabboxBin: trimToValue(process.env.OPENCLAW_TELEGRAM_USER_CRABBOX_BIN) ?? "crabbox",
     desktopChatTitle:
@@ -194,18 +234,24 @@ function parseArgs(argv: string[]): Options {
     gatewayPort: 19_879,
     idleTimeout: "60m",
     keepBox: false,
+    mockResponseText: "OPENCLAW_E2E_OK",
     mockPort: 19_882,
     outputDir: path.join(DEFAULT_OUTPUT_ROOT, stamp),
+    previewCropWidth: TELEGRAM_PROOF_VIEW.cropWidth,
+    previewFps: 24,
+    previewWidth: 1920,
     provider: process.env.OPENCLAW_TELEGRAM_USER_CRABBOX_PROVIDER?.trim() || "aws",
     publishFullArtifacts: false,
     publishRepo: "openclaw/openclaw",
+    recordFps: 24,
     recordSeconds: 35,
     remoteCommand: [],
     target: "linux",
     text: "/status",
     timeoutMs: 90_000,
     ttl: "120m",
-    userDriverScript: DEFAULT_USER_DRIVER,
+    userDriverScript:
+      trimToValue(process.env.OPENCLAW_TELEGRAM_USER_DRIVER_SCRIPT) ?? DEFAULT_USER_DRIVER,
   };
   const commandSeparator = argv.indexOf("--");
   if (command === "run" && commandSeparator >= 0) {
@@ -223,7 +269,9 @@ function parseArgs(argv: string[]): Options {
       index += 1;
       return value;
     };
-    if (arg === "--crabbox-bin") {
+    if (arg === "--class") {
+      opts.crabboxClass = readValue();
+    } else if (arg === "--crabbox-bin") {
       opts.crabboxBin = readValue();
     } else if (arg === "--desktop-chat-title") {
       opts.desktopChatTitle = readValue();
@@ -247,8 +295,24 @@ function parseArgs(argv: string[]): Options {
       opts.keepBox = true;
     } else if (arg === "--mock-port") {
       opts.mockPort = parsePositiveInteger(readValue(), "--mock-port");
+    } else if (arg === "--mock-response-file") {
+      opts.mockResponseText = fs.readFileSync(resolveRepoPath(process.cwd(), readValue()), "utf8");
+    } else if (arg === "--message-id") {
+      opts.messageId = String(parsePositiveInteger(readValue(), "--message-id"));
     } else if (arg === "--output-dir") {
       opts.outputDir = readValue();
+    } else if (arg === "--preview-crop") {
+      const value = readValue();
+      if (value !== "telegram-window") {
+        throw new Error("--preview-crop must be telegram-window.");
+      }
+      opts.previewCrop = value;
+    } else if (arg === "--preview-crop-width") {
+      opts.previewCropWidth = parsePositiveInteger(readValue(), "--preview-crop-width");
+    } else if (arg === "--preview-fps") {
+      opts.previewFps = parsePositiveInteger(readValue(), "--preview-fps");
+    } else if (arg === "--preview-width") {
+      opts.previewWidth = parsePositiveInteger(readValue(), "--preview-width");
     } else if (arg === "--provider") {
       opts.provider = readValue();
     } else if (arg === "--pr") {
@@ -263,6 +327,8 @@ function parseArgs(argv: string[]): Options {
       opts.publishSummary = readValue();
     } else if (arg === "--full-artifacts") {
       opts.publishFullArtifacts = true;
+    } else if (arg === "--record-fps") {
+      opts.recordFps = parsePositiveInteger(readValue(), "--record-fps");
     } else if (arg === "--sut-username") {
       opts.sutUsername = readValue().replace(/^@/u, "");
     } else if (arg === "--target") {
@@ -290,10 +356,13 @@ function parseArgs(argv: string[]): Options {
     throw new Error("run requires a remote command after --.");
   }
   if (
-    ["finish", "publish", "run", "screenshot", "send", "status"].includes(command) &&
+    ["finish", "publish", "run", "screenshot", "send", "status", "view"].includes(command) &&
     !opts.sessionFile
   ) {
     throw new Error(`${command} requires --session.`);
+  }
+  if (command === "view" && !opts.messageId) {
+    throw new Error("view requires --message-id.");
   }
   if (command === "publish" && !opts.publishPr) {
     throw new Error("publish requires --pr.");
@@ -346,6 +415,56 @@ function requireString(source: JsonObject, key: string) {
 function optionalString(source: JsonObject, key: string) {
   const value = source[key];
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function childProcessBaseEnv() {
+  const keys = [
+    "CI",
+    "COREPACK_HOME",
+    "FORCE_COLOR",
+    "HOME",
+    "LANG",
+    "LC_ALL",
+    "NODE_OPTIONS",
+    "OPENCLAW_BUILD_PRIVATE_QA",
+    "OPENCLAW_ENABLE_PRIVATE_QA_CLI",
+    "PATH",
+    "PNPM_HOME",
+    "SHELL",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    "USER",
+    "XDG_CACHE_HOME",
+    "XDG_CONFIG_HOME",
+  ];
+  const env: NodeJS.ProcessEnv = {};
+  for (const key of keys) {
+    const value = process.env[key];
+    if (value) {
+      env[key] = value;
+    }
+  }
+  return env;
+}
+
+function mockServerEnv(params: { mockPort: number; mockResponseText: string; requestLog: string }) {
+  return {
+    ...childProcessBaseEnv(),
+    MOCK_PORT: String(params.mockPort),
+    MOCK_REQUEST_LOG: params.requestLog,
+    SUCCESS_MARKER: params.mockResponseText,
+  };
+}
+
+function gatewayEnv(params: { configPath: string; stateDir: string; sutToken: string }) {
+  return {
+    ...childProcessBaseEnv(),
+    OPENAI_API_KEY: "sk-openclaw-e2e-mock",
+    OPENCLAW_CONFIG_PATH: params.configPath,
+    OPENCLAW_STATE_DIR: params.stateDir,
+    TELEGRAM_BOT_TOKEN: params.sutToken,
+  };
 }
 
 function shellQuote(value: string) {
@@ -662,6 +781,7 @@ function writeSutConfig(params: {
 async function startLocalSut(params: {
   gatewayPort: number;
   groupId: string;
+  mockResponseText: string;
   mockPort: number;
   outputDir: string;
   sutToken: string;
@@ -673,12 +793,7 @@ async function startLocalSut(params: {
   const requestLog = path.join(params.outputDir, "mock-openai-requests.ndjson");
   const mock = spawnLogged("node", ["scripts/e2e/mock-openai-server.mjs"], {
     cwd: params.repoRoot,
-    env: {
-      ...process.env,
-      MOCK_PORT: String(params.mockPort),
-      MOCK_REQUEST_LOG: requestLog,
-      SUCCESS_MARKER: "OPENCLAW_E2E_OK",
-    },
+    env: mockServerEnv({ ...params, requestLog }),
   });
   await waitForOutput(
     mock.child,
@@ -692,13 +807,7 @@ async function startLocalSut(params: {
     ["openclaw", "gateway", "--port", String(params.gatewayPort)],
     {
       cwd: params.repoRoot,
-      env: {
-        ...process.env,
-        OPENAI_API_KEY: "sk-openclaw-e2e-mock",
-        OPENCLAW_CONFIG_PATH: config.configPath,
-        OPENCLAW_STATE_DIR: config.stateDir,
-        TELEGRAM_BOT_TOKEN: params.sutToken,
-      },
+      env: gatewayEnv({ ...config, sutToken: params.sutToken }),
     },
   );
   await waitForOutput(gateway.child, /\[gateway\] ready/u, () => gateway.output, "gateway", 60_000);
@@ -720,6 +829,7 @@ async function startLocalSut(params: {
 async function startLocalSutDaemon(params: {
   gatewayPort: number;
   groupId: string;
+  mockResponseText: string;
   mockPort: number;
   outputDir: string;
   sutToken: string;
@@ -735,12 +845,7 @@ async function startLocalSutDaemon(params: {
     command: "node",
     args: ["scripts/e2e/mock-openai-server.mjs"],
     cwd: params.repoRoot,
-    env: {
-      ...process.env,
-      MOCK_PORT: String(params.mockPort),
-      MOCK_REQUEST_LOG: requestLog,
-      SUCCESS_MARKER: "OPENCLAW_E2E_OK",
-    },
+    env: mockServerEnv({ ...params, requestLog }),
     logPath: mockLog,
   });
   if (!mockPid) {
@@ -752,13 +857,7 @@ async function startLocalSutDaemon(params: {
     command: "pnpm",
     args: ["openclaw", "gateway", "--port", String(params.gatewayPort)],
     cwd: params.repoRoot,
-    env: {
-      ...process.env,
-      OPENAI_API_KEY: "sk-openclaw-e2e-mock",
-      OPENCLAW_CONFIG_PATH: config.configPath,
-      OPENCLAW_STATE_DIR: config.stateDir,
-      TELEGRAM_BOT_TOKEN: params.sutToken,
-    },
+    env: gatewayEnv({ ...config, sutToken: params.sutToken }),
     logPath: gatewayLog,
   });
   if (!gatewayPid) {
@@ -791,6 +890,8 @@ async function warmupCrabbox(opts: Options, root: string) {
       opts.target,
       "--desktop",
       "--browser",
+      "--class",
+      opts.crabboxClass,
       "--idle-timeout",
       opts.idleTimeout,
       "--ttl",
@@ -804,6 +905,93 @@ async function warmupCrabbox(opts: Options, root: string) {
     throw new Error("Crabbox warmup did not print a lease id.");
   }
   return leaseId;
+}
+
+async function createMotionPreview(params: {
+  motionGifPath: string;
+  motionVideoPath: string;
+  opts: Options;
+  root: string;
+  videoPath: string;
+}) {
+  const preview = await runCommand({
+    command: params.opts.crabboxBin,
+    args: [
+      "media",
+      "preview",
+      "--input",
+      params.videoPath,
+      "--output",
+      params.motionGifPath,
+      "--fps",
+      String(params.opts.previewFps),
+      "--width",
+      String(params.opts.previewWidth),
+      "--trimmed-video-output",
+      params.motionVideoPath,
+      "--json",
+    ],
+    cwd: params.root,
+    stdio: "inherit",
+  });
+  return JSON.parse(preview.stdout) as JsonObject;
+}
+
+function previewCrop(opts: Options) {
+  return opts.previewCrop === "telegram-window"
+    ? { ...TELEGRAM_PROOF_VIEW, cropWidth: opts.previewCropWidth }
+    : undefined;
+}
+
+async function createCroppedMotionPreview(params: {
+  crop: typeof TELEGRAM_PROOF_VIEW;
+  croppedGifPath: string;
+  croppedVideoPath: string;
+  opts: Options;
+  root: string;
+  videoPath: string;
+}) {
+  const crop = `crop=${params.crop.width}:${params.crop.height}:${params.crop.x}:${params.crop.y}`;
+  const scale = `scale=${params.crop.cropWidth}:-2:flags=lanczos`;
+  await runCommand({
+    command: "ffmpeg",
+    args: [
+      "-y",
+      "-hide_banner",
+      "-loglevel",
+      "warning",
+      "-i",
+      params.videoPath,
+      "-vf",
+      `${crop},${scale}`,
+      "-pix_fmt",
+      "yuv420p",
+      params.croppedVideoPath,
+    ],
+    cwd: params.root,
+    stdio: "inherit",
+  });
+  await runCommand({
+    command: "ffmpeg",
+    args: [
+      "-y",
+      "-hide_banner",
+      "-loglevel",
+      "warning",
+      "-i",
+      params.videoPath,
+      "-filter_complex",
+      `${crop},fps=${params.opts.previewFps},${scale},split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse`,
+      params.croppedGifPath,
+    ],
+    cwd: params.root,
+    stdio: "inherit",
+  });
+  return {
+    crop,
+    fps: params.opts.previewFps,
+    outputWidth: params.crop.cropWidth,
+  };
 }
 
 async function inspectCrabbox(opts: Options, root: string, leaseId: string) {
@@ -1014,12 +1202,17 @@ async function writeExecutable(filePath: string, content: string) {
   fs.chmodSync(filePath, 0o700);
 }
 
+function requireUserDriverScript(opts: Options) {
+  const userDriverScript = expandHome(opts.userDriverScript);
+  if (!fs.existsSync(userDriverScript)) {
+    throw new Error(`Missing user driver script: ${opts.userDriverScript}`);
+  }
+  return userDriverScript;
+}
+
 async function prepareRemoteState(params: { localRoot: string; opts: Options; root: string }) {
   const stateArchive = path.join(params.localRoot, "remote-state.tgz");
-  const userDriverScript = expandHome(params.opts.userDriverScript);
-  if (!fs.existsSync(userDriverScript)) {
-    throw new Error(`Missing user driver script: ${params.opts.userDriverScript}`);
-  }
+  const userDriverScript = requireUserDriverScript(params.opts);
   await runCommand({
     command: "cp",
     args: [userDriverScript, path.join(params.localRoot, "user-driver.py")],
@@ -1047,7 +1240,7 @@ async function leaseCredential(params: { localRoot: string; opts: Options; root:
   const leaseFile = path.join(params.localRoot, "lease.json");
   const payloadFile = path.join(params.localRoot, "payload.json");
   const args = [
-    "scripts/e2e/telegram-user-credential.ts",
+    CREDENTIAL_SCRIPT,
     "lease-restore",
     "--user-driver-dir",
     userDriverDir,
@@ -1086,7 +1279,7 @@ async function releaseCredential(root: string, opts: Options, leaseFile: string)
   if (!fs.existsSync(leaseFile)) {
     return;
   }
-  const args = ["scripts/e2e/telegram-user-credential.ts", "release", "--lease-file", leaseFile];
+  const args = [CREDENTIAL_SCRIPT, "release", "--lease-file", leaseFile];
   if (opts.envFile) {
     args.push("--env-file", opts.envFile);
   }
@@ -1142,6 +1335,8 @@ function summarizeProbe(probePath: string) {
 }
 
 function writeReport(params: {
+  croppedMotionGifPath?: string;
+  croppedMotionVideoPath?: string;
   motionGifPath?: string;
   motionVideoPath?: string;
   outputDir: string;
@@ -1165,11 +1360,19 @@ function writeReport(params: {
       params.motionGifPath
         ? `Motion GIF: ${path.basename(params.motionGifPath)}`
         : "Motion GIF: missing",
+      params.croppedMotionVideoPath
+        ? `Cropped motion video: ${path.basename(params.croppedMotionVideoPath)}`
+        : undefined,
+      params.croppedMotionGifPath
+        ? `Cropped motion GIF: ${path.basename(params.croppedMotionGifPath)}`
+        : undefined,
       params.screenshotPath
         ? `Screenshot: ${path.basename(params.screenshotPath)}`
         : "Screenshot: missing",
       "",
-    ].join("\n"),
+    ]
+      .filter((line) => line !== undefined)
+      .join("\n"),
   );
   return reportPath;
 }
@@ -1246,7 +1449,7 @@ EOF
   );
 }
 
-async function startRemoteRecording(root: string, inspect: CrabboxInspect) {
+async function startRemoteRecording(root: string, inspect: CrabboxInspect, opts: Options) {
   const command = `set -euo pipefail
 export DISPLAY="\${DISPLAY:-:99}"
 root=${REMOTE_ROOT}
@@ -1254,8 +1457,8 @@ video="$root/session.mp4"
 log="$root/ffmpeg.log"
 pid_file="$root/ffmpeg.pid"
 rm -f "$video" "$log" "$pid_file"
-size="$(xdpyinfo | awk '/dimensions:/ {print $2; exit}')"
-nohup ffmpeg -y -hide_banner -loglevel warning -f x11grab -framerate 15 -video_size "$size" -i "$DISPLAY" -pix_fmt yuv420p "$video" >"$log" 2>&1 &
+size="$(xdpyinfo | awk '/dimensions:/ {size=$2} END {if (!size) exit 1; print size}')"
+nohup ffmpeg -y -hide_banner -loglevel warning -f x11grab -framerate ${opts.recordFps} -video_size "$size" -i "$DISPLAY" -pix_fmt yuv420p "$video" >"$log" 2>&1 &
 echo $! >"$pid_file"`;
   await sshRun(root, inspect, command);
   return {
@@ -1299,6 +1502,7 @@ async function startSession(root: string, opts: Options, outputDir: string) {
   if (opts.dryRun) {
     return {
       command: "telegram-user-crabbox-session",
+      crabboxClass: opts.crabboxClass,
       outputDir,
       provider: opts.provider,
       target: opts.target,
@@ -1307,6 +1511,7 @@ async function startSession(root: string, opts: Options, outputDir: string) {
     };
   }
 
+  requireUserDriverScript(opts);
   const credential = await leaseCredential({ localRoot, opts, root });
   const sut = opts.sutUsername
     ? { id: "", username: opts.sutUsername }
@@ -1332,17 +1537,19 @@ async function startSession(root: string, opts: Options, outputDir: string) {
     localSut = await startLocalSutDaemon({
       gatewayPort: opts.gatewayPort,
       groupId: credential.groupId,
+      mockResponseText: opts.mockResponseText,
       mockPort: opts.mockPort,
       outputDir,
       repoRoot: root,
       sutToken: credential.sutToken,
       testerId: credential.testerUserId,
     });
-    const recorder = await startRemoteRecording(root, inspect);
+    const recorder = await startRemoteRecording(root, inspect, opts);
     const session: SessionFile = {
       command: "telegram-user-crabbox-session",
       createdAt: new Date().toISOString(),
       crabbox: {
+        class: opts.crabboxClass,
         createdLease,
         id: leaseId,
         inspect,
@@ -1376,8 +1583,9 @@ async function startSession(root: string, opts: Options, outputDir: string) {
       webvnc: `${opts.crabboxBin} webvnc --provider ${opts.provider} --target ${opts.target} --id ${leaseId} --open`,
       commands: {
         send: `pnpm qa:telegram-user:crabbox -- send --session ${path.relative(root, pathname)} --text '/status'`,
+        view: `pnpm qa:telegram-user:crabbox -- view --session ${path.relative(root, pathname)} --message-id <message-id>`,
         run: `pnpm qa:telegram-user:crabbox -- run --session ${path.relative(root, pathname)} -- bash -lc 'source ${REMOTE_ROOT}/env.sh && python3 ${REMOTE_ROOT}/user-driver.py transcript --limit 20 --json'`,
-        finish: `pnpm qa:telegram-user:crabbox -- finish --session ${path.relative(root, pathname)}`,
+        finish: `pnpm qa:telegram-user:crabbox -- finish --session ${path.relative(root, pathname)} --preview-crop telegram-window`,
       },
     };
   } catch (error) {
@@ -1471,6 +1679,58 @@ async function statusSession(root: string, opts: Options, outputDir: string) {
   };
 }
 
+function telegramPrivatePostLink(groupId: string, messageId: string) {
+  if (!/^-100\d+$/u.test(groupId)) {
+    throw new Error(`Telegram privatepost links require a -100 group id, got ${groupId}.`);
+  }
+  return `tg://privatepost?channel=${groupId.slice(4)}&post=${messageId}`;
+}
+
+function renderProofViewCommand(link: string) {
+  return `set -euo pipefail
+export DISPLAY="\${DISPLAY:-:99}"
+root=${REMOTE_ROOT}
+win="$(wmctrl -lxG | awk 'tolower($0) ~ /telegramdesktop/ {print $1; exit}')"
+if [ -z "$win" ]; then
+  echo "Telegram Desktop window not found." >&2
+  exit 1
+fi
+wmctrl -ir "$win" -b remove,maximized_vert,maximized_horz,fullscreen
+wmctrl -ir "$win" -e 0,${TELEGRAM_PROOF_VIEW.x},${TELEGRAM_PROOF_VIEW.y},${TELEGRAM_PROOF_VIEW.width},${TELEGRAM_PROOF_VIEW.height}
+telegram="$root/Telegram/Telegram"
+test -x "$telegram"
+set +e
+timeout 5 "$telegram" -workdir "$root/desktop" ${shellQuote(link)}
+status="$?"
+set -e
+if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then
+  exit "$status"
+fi
+sleep 1
+wmctrl -lxG | awk 'tolower($0) ~ /telegramdesktop/'`;
+}
+
+async function viewSession(root: string, opts: Options, outputDir: string) {
+  const { session } = readSession(root, opts, outputDir);
+  const messageId = opts.messageId;
+  if (!messageId) {
+    throw new Error("view requires --message-id.");
+  }
+  const link = telegramPrivatePostLink(session.credential.groupId, messageId);
+  const result = await sshRun(root, session.crabbox.inspect, renderProofViewCommand(link));
+  const logPath = path.join(
+    session.outputDir,
+    `proof-view-${new Date().toISOString().replace(/[:.]/gu, "-")}.log`,
+  );
+  fs.writeFileSync(logPath, `${result.stdout}${result.stderr}`);
+  return {
+    geometry: TELEGRAM_PROOF_VIEW,
+    link,
+    log: path.relative(root, logPath),
+    status: "pass",
+  };
+}
+
 async function finishSession(root: string, opts: Options, outputDir: string) {
   const { path: pathname, session } = readSession(root, opts, outputDir);
   const summary: JsonObject = {
@@ -1483,10 +1743,19 @@ async function finishSession(root: string, opts: Options, outputDir: string) {
   const videoPath = path.join(session.outputDir, "telegram-user-crabbox-session.mp4");
   const motionVideoPath = path.join(session.outputDir, "telegram-user-crabbox-session-motion.mp4");
   const motionGifPath = path.join(session.outputDir, "telegram-user-crabbox-session-motion.gif");
+  const croppedMotionVideoPath = path.join(
+    session.outputDir,
+    "telegram-user-crabbox-session-motion-telegram-window.mp4",
+  );
+  const croppedMotionGifPath = path.join(
+    session.outputDir,
+    "telegram-user-crabbox-session-motion-telegram-window.gif",
+  );
   const screenshotPath = path.join(session.outputDir, "telegram-user-crabbox-session.png");
   const desktopLogPath = path.join(session.outputDir, "telegram-desktop.log");
   const statusPath = path.join(session.outputDir, "status.json");
   const ffmpegLogPath = path.join(session.outputDir, "ffmpeg.log");
+  const crop = previewCrop(opts);
   try {
     await stopRemoteRecording(root, session.crabbox.inspect, session);
     await scpFromRemote(root, session.crabbox.inspect, session.recorder.remoteVideo, videoPath);
@@ -1505,23 +1774,23 @@ async function finishSession(root: string, opts: Options, outputDir: string) {
     await scpFromRemote(root, session.crabbox.inspect, session.recorder.log, ffmpegLogPath).catch(
       () => {},
     );
-    const preview = await runCommand({
-      command: opts.crabboxBin,
-      args: [
-        "media",
-        "preview",
-        "--input",
-        videoPath,
-        "--output",
-        motionGifPath,
-        "--trimmed-video-output",
-        motionVideoPath,
-        "--json",
-      ],
-      cwd: root,
-      stdio: "inherit",
+    summary.mediaPreview = await createMotionPreview({
+      motionGifPath,
+      motionVideoPath,
+      opts,
+      root,
+      videoPath,
     });
-    summary.mediaPreview = JSON.parse(preview.stdout) as JsonObject;
+    if (crop) {
+      summary.croppedMediaPreview = await createCroppedMotionPreview({
+        crop,
+        croppedGifPath: croppedMotionGifPath,
+        croppedVideoPath: croppedMotionVideoPath,
+        opts,
+        root,
+        videoPath: motionVideoPath,
+      });
+    }
     await runCommand({
       command: opts.crabboxBin,
       args: [
@@ -1542,6 +1811,12 @@ async function finishSession(root: string, opts: Options, outputDir: string) {
       desktopLog: path.relative(root, desktopLogPath),
       ffmpegLog: path.relative(root, ffmpegLogPath),
       previewGif: path.relative(root, motionGifPath),
+      ...(crop
+        ? {
+            previewGifCropped: path.relative(root, croppedMotionGifPath),
+            trimmedVideoCropped: path.relative(root, croppedMotionVideoPath),
+          }
+        : {}),
       screenshot: path.relative(root, screenshotPath),
       status: path.relative(root, statusPath),
       trimmedVideo: path.relative(root, motionVideoPath),
@@ -1567,6 +1842,8 @@ async function finishSession(root: string, opts: Options, outputDir: string) {
     const summaryPath = path.join(session.outputDir, "telegram-user-crabbox-session-summary.json");
     fs.writeFileSync(summaryPath, `${JSON.stringify(summary, null, 2)}\n`);
     const reportPath = writeReport({
+      croppedMotionGifPath: crop ? croppedMotionGifPath : undefined,
+      croppedMotionVideoPath: crop ? croppedMotionVideoPath : undefined,
       motionGifPath,
       motionVideoPath,
       outputDir: session.outputDir,
@@ -1587,11 +1864,16 @@ async function finishSession(root: string, opts: Options, outputDir: string) {
 async function publishSessionArtifacts(root: string, opts: Options, outputDir: string) {
   const { session } = readSession(root, opts, outputDir);
   const motionGifPath = path.join(session.outputDir, "telegram-user-crabbox-session-motion.gif");
+  const croppedMotionGifPath = path.join(
+    session.outputDir,
+    "telegram-user-crabbox-session-motion-telegram-window.gif",
+  );
+  const publishGifPath = fs.existsSync(croppedMotionGifPath) ? croppedMotionGifPath : motionGifPath;
   const publishDir = opts.publishFullArtifacts
     ? session.outputDir
     : path.join(session.outputDir, "publish-gif-only");
   if (!opts.publishFullArtifacts) {
-    if (!fs.existsSync(motionGifPath)) {
+    if (!fs.existsSync(publishGifPath)) {
       throw new Error(
         `Missing motion GIF. Run finish first: ${path.relative(root, motionGifPath)}`,
       );
@@ -1599,7 +1881,7 @@ async function publishSessionArtifacts(root: string, opts: Options, outputDir: s
     fs.rmSync(publishDir, { force: true, recursive: true });
     fs.mkdirSync(publishDir, { recursive: true });
     fs.copyFileSync(
-      motionGifPath,
+      publishGifPath,
       path.join(publishDir, "telegram-user-crabbox-session-motion.gif"),
     );
   }
@@ -1627,7 +1909,11 @@ async function publishSessionArtifacts(root: string, opts: Options, outputDir: s
     stdio: "inherit",
   });
   return {
-    artifactMode: opts.publishFullArtifacts ? "full" : "gif-only",
+    artifactMode: opts.publishFullArtifacts
+      ? "full"
+      : publishGifPath === croppedMotionGifPath
+        ? "gif-only-cropped"
+        : "gif-only",
     publishDir: path.relative(root, publishDir),
     status: "pass",
   };
@@ -1658,6 +1944,10 @@ async function main() {
   }
   if (opts.command === "status") {
     console.log(JSON.stringify(await statusSession(root, opts, outputDir), null, 2));
+    return;
+  }
+  if (opts.command === "view") {
+    console.log(JSON.stringify(await viewSession(root, opts, outputDir), null, 2));
     return;
   }
   if (opts.command === "finish") {
@@ -1696,6 +1986,7 @@ async function main() {
       summary.status = "pass";
       summary.plan = {
         command: "telegram-user-crabbox-proof",
+        crabboxClass: opts.crabboxClass,
         outputDir,
         provider: opts.provider,
         target: opts.target,
@@ -1706,6 +1997,7 @@ async function main() {
       return;
     }
 
+    requireUserDriverScript(opts);
     credential = await leaseCredential({ localRoot, opts, root });
     const sut = opts.sutUsername
       ? { id: "", username: opts.sutUsername }
@@ -1778,6 +2070,7 @@ async function main() {
     const sutRuntime = await startLocalSut({
       gatewayPort: opts.gatewayPort,
       groupId: credential.groupId,
+      mockResponseText: opts.mockResponseText,
       mockPort: opts.mockPort,
       outputDir,
       repoRoot: root,
@@ -1821,23 +2114,13 @@ async function main() {
     }
     const motionVideoPath = path.join(outputDir, "telegram-user-crabbox-proof-motion.mp4");
     const motionGifPath = path.join(outputDir, "telegram-user-crabbox-proof-motion.gif");
-    const preview = await runCommand({
-      command: opts.crabboxBin,
-      args: [
-        "media",
-        "preview",
-        "--input",
-        videoPath,
-        "--output",
-        motionGifPath,
-        "--trimmed-video-output",
-        motionVideoPath,
-        "--json",
-      ],
-      cwd: root,
-      stdio: "inherit",
+    summary.mediaPreview = await createMotionPreview({
+      motionGifPath,
+      motionVideoPath,
+      opts,
+      root,
+      videoPath,
     });
-    summary.mediaPreview = JSON.parse(preview.stdout) as JsonObject;
 
     const screenshotPath = path.join(outputDir, "telegram-user-crabbox-proof.png");
     await runCommand({

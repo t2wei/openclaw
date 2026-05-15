@@ -13,13 +13,8 @@ import type { DeliveryContext } from "../../utils/delivery-context.types.js";
 import { getFileStatSnapshot } from "../cache-utils.js";
 import { enforceSessionDiskBudget, type SessionDiskBudgetSweepResult } from "./disk-budget.js";
 import { deriveSessionMetaPatch } from "./metadata.js";
+import { isRedisSessionBackendActive, updateRedisSessionMirror } from "./redis-backend.js";
 import {
-  getRedisSessionMirror,
-  isRedisSessionBackendActive,
-  updateRedisSessionMirror,
-} from "./redis-backend.js";
-import {
-  clearSessionStoreCaches,
   dropSessionStoreObjectCache,
   getSerializedSessionStore,
   isSessionStoreCacheEnabled,
@@ -29,6 +24,7 @@ import {
 } from "./store-cache.js";
 import { normalizeStoreSessionKey, resolveSessionStoreEntry } from "./store-entry.js";
 import { loadSessionStore, normalizeSessionStore } from "./store-load.js";
+import { collectSessionMaintenancePreserveKeys } from "./store-maintenance-preserve.js";
 import { resolveMaintenanceConfig } from "./store-maintenance-runtime.js";
 import {
   capEntryCount,
@@ -293,9 +289,7 @@ async function saveSessionStoreUnlocked(
         diskBudget,
       });
     } else {
-      const preserveSessionKeys = opts?.activeSessionKey
-        ? new Set([opts.activeSessionKey])
-        : undefined;
+      const preserveSessionKeys = collectSessionMaintenancePreserveKeys([opts?.activeSessionKey]);
       // Prune stale entries and cap total count before serializing.
       const removedSessionFiles = new Map<string, string | undefined>();
       const pruned = pruneStaleEntries(store, maintenance.pruneAfterMs, {
@@ -366,6 +360,7 @@ async function saveSessionStoreUnlocked(
         store,
         storePath,
         activeSessionKey: opts?.activeSessionKey,
+        preserveKeys: preserveSessionKeys,
         maintenance,
         warnOnly: false,
         log,
