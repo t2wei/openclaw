@@ -1276,6 +1276,8 @@ export async function handleFeishuMessage(params: {
         InboundHistory: inboundHistory,
         ReplyToId: ctx.parentId,
         RootMessageId: ctx.rootId,
+        MessageThreadId: groupSession?.topicScope ?? ctx.rootId,
+        ReplyTargetId: groupSession?.topicScope ? (ctx.rootId ?? ctx.messageId) : undefined,
         RawBody: agentFacingContent,
         CommandBody: agentFacingContent,
         Transcript: audioTranscript,
@@ -1295,9 +1297,6 @@ export async function handleFeishuMessage(params: {
         ThreadStarterBody: threadContext.threadStarterBody,
         ThreadHistoryBody: threadContext.threadHistoryBody,
         ThreadLabel: threadContext.threadLabel,
-        // Only use rootId (om_* message anchor) — threadId (omt_*) is a container
-        // ID and would produce invalid reply targets downstream.
-        MessageThreadId: ctx.rootId && isTopicSessionForThread ? ctx.rootId : undefined,
         Timestamp: messageCreateTimeMs,
         WasMentioned: wasMentioned,
         CommandAuthorized: commandAuthorized,

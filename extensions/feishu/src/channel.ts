@@ -260,7 +260,13 @@ function describeFeishuMessageTool({
   if (enabledAccounts.length === 0) {
     return {
       actions: [],
-      capabilities: enabled ? ["presentation"] : [],
+      // OXSCI PATCH: Do not expose card capability/schema to the message tool.
+      // Card rendering is an internal Feishu plugin concern — the outbound
+      // sendText handler auto-selects card mode based on content (markdown
+      // tables, code blocks). Exposing card JSON to the LLM causes 400 errors
+      // (Feishu ErrCode 200380) when the model generates invalid card JSON.
+      capabilities: [],
+      schema: null,
     };
   }
   const actions = new Set<ChannelMessageActionName>([
@@ -285,7 +291,8 @@ function describeFeishuMessageTool({
   }
   return {
     actions: Array.from(actions),
-    capabilities: enabled ? ["presentation"] : [],
+    capabilities: [],
+    schema: null,
   };
 }
 
@@ -1406,5 +1413,21 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount, FeishuProbeResul
         sendText: { resolve: (runtime) => runtime.feishuOutbound.sendText },
         sendMedia: { resolve: (runtime) => runtime.feishuOutbound.sendMedia },
       }),
+    },
+    threading: {
+      resolveAutoThreadId: ({ toolContext, replyToId }) => {
+        if (replyToId) return undefined;
+        if (!toolContext) return undefined;
+        // Prefer replyTargetId (om_ format, API-ready) over messageThreadId
+        if (toolContext.replyTargetId) {
+          return toolContext.replyTargetId;
+        }
+        // Reject omt_ topic scope IDs — not valid for Feishu reply API
+        const threadId = toolContext.messageThreadId ?? toolContext.currentThreadTs;
+        if (threadId && threadId.startsWith("omt_")) {
+          return undefined;
+        }
+        return threadId ?? undefined;
+      },
     },
   });

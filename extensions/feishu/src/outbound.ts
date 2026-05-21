@@ -405,6 +405,11 @@ function resolveReplyToMessageId(params: {
     return undefined;
   }
   const trimmed = String(params.threadId).trim();
+  // Reject omt_ topic IDs — they are not valid open_message_ids and
+  // would cause a 400 from the Feishu API.
+  if (trimmed.startsWith("omt_")) {
+    return undefined;
+  }
   return trimmed || undefined;
 }
 
