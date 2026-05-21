@@ -134,6 +134,15 @@ export function buildThreadingToolContext(params: {
       currentChannelProvider: provider ?? (rawProvider as ChannelId),
       currentMessageId,
       hasRepliedRef,
+      // Preserve thread context for channels without a dedicated threading adapter.
+      // - currentThreadTs: computed fallback (backwards compat for generic channels)
+      // - messageThreadId: raw session thread scope (may be platform-specific, e.g. Feishu omt_).
+      //   The plugin's resolveReplyTransport hook is responsible for translating
+      //   channel-specific thread scopes into a valid replyToMessageId.
+      currentThreadTs:
+        sessionCtx.MessageThreadId != null ? String(sessionCtx.MessageThreadId) : undefined,
+      messageThreadId:
+        sessionCtx.MessageThreadId != null ? String(sessionCtx.MessageThreadId) : undefined,
     };
   }
   const context =

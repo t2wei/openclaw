@@ -2146,7 +2146,13 @@ describe("task-registry", () => {
     });
   });
 
-  it("closes stale terminal persistent ACP sessions only when no binding remains", async () => {
+  // OxSci patch: terminal-task maintenance no longer closes persistent ACP
+  // sessions even when they have no thread binding — the parent may queue more
+  // acp_send turns (multi-turn A2A in channels that can't auto-spawn threads,
+  // e.g. Feishu topics). Orphaned-parent cleanup + ACP runtime idle TTL still
+  // reclaim them. Renamed: was "closes stale terminal persistent ACP sessions
+  // only when no binding remains".
+  it("keeps terminal persistent ACP sessions alive even when no binding remains", async () => {
     await withTaskRegistryTempDir(async (root) => {
       process.env.OPENCLAW_STATE_DIR = root;
       resetTaskRegistryMemoryForTest();
@@ -2187,15 +2193,11 @@ describe("task-registry", () => {
 
       await runTaskRegistryMaintenance();
 
-      expect(closeAcpSession).toHaveBeenCalledWith({
-        cfg: {},
-        sessionKey: childSessionKey,
-        reason: "terminal-task-cleanup",
-      });
-      expect(unbindSessionBindings).toHaveBeenCalledWith({
-        targetSessionKey: childSessionKey,
-        reason: "terminal-task-cleanup",
-      });
+      // OxSci patch: was previously expected to close. Persistent sessions
+      // without binding now stay alive after child task termination so the
+      // parent can keep sending acp_send turns.
+      expect(closeAcpSession).not.toHaveBeenCalled();
+      expect(unbindSessionBindings).not.toHaveBeenCalled();
     });
   });
 
@@ -2314,7 +2316,11 @@ describe("task-registry", () => {
     });
   });
 
-  it("closes orphaned parent-owned persistent ACP sessions without active bindings", async () => {
+  it("keeps orphaned parent-owned persistent ACP sessions alive even when no binding remains", async () => {
+    // OxSci patch: persistent ACP sessions rely on explicit lifecycle
+    // (ACP runtime idle TTL or /acp close) rather than thread-binding presence,
+    // so that Feishu topic A2A flows (where threadAvailable=false) survive
+    // between turns.
     await withTaskRegistryTempDir(async (root) => {
       process.env.OPENCLAW_STATE_DIR = root;
       resetTaskRegistryMemoryForTest();
@@ -2339,15 +2345,8 @@ describe("task-registry", () => {
 
       await runTaskRegistryMaintenance();
 
-      expect(closeAcpSession).toHaveBeenCalledWith({
-        cfg: {},
-        sessionKey: childSessionKey,
-        reason: "orphaned-parent-task-cleanup",
-      });
-      expect(unbindSessionBindings).toHaveBeenCalledWith({
-        targetSessionKey: childSessionKey,
-        reason: "orphaned-parent-task-cleanup",
-      });
+      expect(closeAcpSession).not.toHaveBeenCalled();
+      expect(unbindSessionBindings).not.toHaveBeenCalled();
     });
   });
 

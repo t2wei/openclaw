@@ -746,6 +746,12 @@ function resolveTranscriptUsageFallback(params: {
  * Returns the owning agent id if the session key belongs to an agent that is no
  * longer present in config (deleted). Returns null for non-agent legacy/global
  * keys, or when the owning agent still exists (#65524).
+ *
+ * OXSCI PATCH: also accept agent ids declared via `acp.allowedAgents`. ACP
+ * harness ids such as `codex`/`claude` are valid session owners even when they
+ * are not present in `agents.list[]`, so the upstream check (#65986) wrongly
+ * treats their orphan-looking sessions as "deleted" and breaks A2A follow-up
+ * (`sessions.resolve` rejects every `acp_send` after the first round).
  */
 export function resolveDeletedAgentIdFromSessionKey(
   cfg: OpenClawConfig,
@@ -759,7 +765,30 @@ export function resolveDeletedAgentIdFromSessionKey(
   if (listAgentIds(cfg).includes(agentId)) {
     return null;
   }
+  if (isAcpAllowedAgent(cfg, agentId)) {
+    return null;
+  }
   return agentId;
+}
+
+function isAcpAllowedAgent(cfg: OpenClawConfig, agentId: string): boolean {
+  const allowed = cfg.acp?.allowedAgents;
+  if (!Array.isArray(allowed)) {
+    return false;
+  }
+  for (const entry of allowed) {
+    if (typeof entry !== "string") {
+      continue;
+    }
+    const trimmed = entry.trim();
+    if (trimmed === "*") {
+      return true;
+    }
+    if (normalizeAgentId(trimmed) === agentId) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function loadSessionEntry(sessionKey: string, opts?: { agentId?: string }) {

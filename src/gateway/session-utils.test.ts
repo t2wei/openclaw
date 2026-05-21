@@ -604,6 +604,56 @@ describe("gateway session utils", () => {
     expect(resolveDeletedAgentIdFromSessionKey(cfg, "agent:main:discord:direct:u1")).toBe("main");
   });
 
+  // OXSCI PATCH — ACP harness agents declared via `acp.allowedAgents` must
+  // not be treated as deleted. Without this, every A2A follow-up call (e.g.
+  // `acp_send`) fails with `Agent "codex" no longer exists in configuration`.
+  test("resolveDeletedAgentIdFromSessionKey honors acp.allowedAgents", () => {
+    const cfg = {
+      session: { mainKey: "main" },
+      agents: { list: [{ id: "main", default: true }] },
+      acp: { allowedAgents: ["main", "codex", "claude"] },
+    } as OpenClawConfig;
+    expect(
+      resolveDeletedAgentIdFromSessionKey(
+        cfg,
+        "agent:codex:acp:6f15162f-4271-4dd5-8f4a-751d0ba41b6c",
+      ),
+    ).toBeNull();
+    expect(
+      resolveDeletedAgentIdFromSessionKey(
+        cfg,
+        "agent:claude:acp:0543d179-b768-4249-aa79-ee950e6ce3eb",
+      ),
+    ).toBeNull();
+    expect(
+      resolveDeletedAgentIdFromSessionKey(cfg, "agent:droid:acp:abc"),
+    ).toBe("droid");
+  });
+
+  test("resolveDeletedAgentIdFromSessionKey treats acp.allowedAgents `*` as wildcard", () => {
+    const cfg = {
+      session: { mainKey: "main" },
+      agents: { list: [{ id: "main", default: true }] },
+      acp: { allowedAgents: ["*"] },
+    } as OpenClawConfig;
+    expect(
+      resolveDeletedAgentIdFromSessionKey(cfg, "agent:codex:acp:any"),
+    ).toBeNull();
+    expect(
+      resolveDeletedAgentIdFromSessionKey(cfg, "agent:something-else:acp:any"),
+    ).toBeNull();
+  });
+
+  test("resolveDeletedAgentIdFromSessionKey falls back to deleted when acp config is absent", () => {
+    const cfg = {
+      session: { mainKey: "main" },
+      agents: { list: [{ id: "main", default: true }] },
+    } as OpenClawConfig;
+    expect(
+      resolveDeletedAgentIdFromSessionKey(cfg, "agent:codex:acp:any"),
+    ).toBe("codex");
+  });
+
   test("resolveSessionStoreKey canonicalizes bare keys to default agent", () => {
     const cfg = {
       session: { mainKey: "main" },

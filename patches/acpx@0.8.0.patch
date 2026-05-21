@@ -1,0 +1,36 @@
+diff --git a/dist/live-checkpoint-B9ctAuqV.js b/dist/live-checkpoint-B9ctAuqV.js
+index 9688b218369102a90c63fe75e604521aab1f7be1..a92f53975afd0a7f8cf5881304fbf5ebe8045682 100644
+--- a/dist/live-checkpoint-B9ctAuqV.js
++++ b/dist/live-checkpoint-B9ctAuqV.js
+@@ -1261,7 +1261,7 @@ async function readSessionIndex(sessionDir) {
+ }
+ async function writeSessionIndex(sessionDir, index) {
+ 	const filePath = sessionIndexPath(sessionDir);
+-	const tempFile = `${filePath}.${process.pid}.${Date.now()}.tmp`;
++	const tempFile = `${filePath}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
+ 	const payload = JSON.stringify({
+ 		schema: SESSION_INDEX_SCHEMA,
+ 		files: [...index.files].toSorted(),
+@@ -1332,7 +1332,7 @@ async function writeSessionRecord(record) {
+ 		const persisted = serializeSessionRecordForDisk(record);
+ 		assertPersistedKeyPolicy(persisted);
+ 		const file = sessionFilePath(record.acpxRecordId);
+-		const tempFile = `${file}.${process.pid}.${Date.now()}.tmp`;
++		const tempFile = `${file}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
+ 		const payload = JSON.stringify(persisted, null, 2);
+ 		await fs$1.writeFile(tempFile, `${payload}\n`, "utf8");
+ 		await fs$1.rename(tempFile, file);
+diff --git a/dist/runtime.js b/dist/runtime.js
+index 7994e1bf871d1eaafe921dfdc7c0e7a1b042347c..c48dce568519584d499b046b44291ca88620fcf0 100644
+--- a/dist/runtime.js
++++ b/dist/runtime.js
+@@ -1077,7 +1077,8 @@ var FileSessionStore = class {
+ 		const persisted = serializeSessionRecordForDisk(record);
+ 		assertPersistedKeyPolicy(persisted);
+ 		const file = this.filePath(record.acpxRecordId);
+-		const tempFile = `${file}.${process.pid}.${Date.now()}.tmp`;
++		const unique = `${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}`;
++		const tempFile = `${file}.${unique}.tmp`;
+ 		const payload = JSON.stringify(persisted, null, 2);
+ 		await fs.writeFile(tempFile, `${payload}\n`, "utf8");
+ 		await fs.rename(tempFile, file);

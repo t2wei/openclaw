@@ -240,7 +240,11 @@ describe("sessions_spawn tool", () => {
     };
 
     expect(schema.properties?.thread).toBeUndefined();
-    expect(schema.properties?.mode?.enum).toEqual(["run"]);
+    // OxSci patch: mode is decoupled from thread-binding capability — session
+    // lifecycle and thread-spawn are orthogonal. The `thread` field is still
+    // hidden (no auto-thread-spawn capability) but `mode: "session"` remains
+    // available for persistent ACP children inside an existing parent thread.
+    expect(schema.properties?.mode?.enum).toEqual(["run", "session"]);
     expect(tool.description).not.toContain("thread-bound");
   });
 

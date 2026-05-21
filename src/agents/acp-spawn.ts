@@ -755,17 +755,20 @@ function resolveAcpSpawnRequesterState(params: {
             requesterAgentId,
           })
         : false,
-    origin: resolveRequesterOriginForChild({
-      cfg: params.cfg,
-      targetAgentId: params.targetAgentId,
-      requesterAgentId: normalizeAgentId(requesterAgentId),
-      requesterChannel: params.ctx.agentChannel,
-      requesterAccountId: params.ctx.agentAccountId,
-      requesterTo: params.ctx.agentTo,
-      requesterThreadId: params.ctx.agentThreadId,
-      requesterGroupSpace: params.ctx.agentGroupSpace,
-      requesterMemberRoleIds: params.ctx.agentMemberRoleIds,
-    }),
+    origin: (() => {
+      const baseOrigin = resolveRequesterOriginForChild({
+        cfg: params.cfg,
+        targetAgentId: params.targetAgentId,
+        requesterAgentId: normalizeAgentId(requesterAgentId),
+        requesterChannel: params.ctx.agentChannel,
+        requesterAccountId: params.ctx.agentAccountId,
+        requesterTo: params.ctx.agentTo,
+        requesterThreadId: params.ctx.agentThreadId,
+        requesterGroupSpace: params.ctx.agentGroupSpace,
+        requesterMemberRoleIds: params.ctx.agentMemberRoleIds,
+      });
+      return baseOrigin;
+    })(),
   };
 }
 
@@ -1138,12 +1141,16 @@ function resolveAcpSpawnBootstrapDeliveryPlan(params: {
     : (boundDeliveryTarget.threadId ?? deliveryThreadId);
   const hasDeliveryTarget = Boolean(params.requester.origin?.channel && inferredDeliveryTo);
 
-  // Thread-bound session spawns always deliver inline to their bound thread.
-  // Background run-mode spawns should stay internal and report back through
-  // the parent task lifecycle notifier instead of letting the child ACP
-  // session write raw output directly into the originating channel.
+  // OXSCI PATCH: Only inline-deliver for thread-bound session spawns (H2A mode).
+  // Non-thread-bound spawns (both run and session mode) rely on the A2A callback
+  // mechanism (agent-command.ts) which extracts delivery context from the parent
+  // session and routes through a nested parent run. This ensures the main agent
+  // receives codex output and can coordinate multi-agent workflows.
   const useInlineDelivery =
-    hasDeliveryTarget && !params.effectiveStreamToParent && params.spawnMode === "session";
+    hasDeliveryTarget &&
+    params.spawnMode === "session" &&
+    params.requestThreadBinding &&
+    !params.effectiveStreamToParent;
 
   return {
     useInlineDelivery,
@@ -1222,15 +1229,8 @@ export async function spawnAcpDirect(
     requestedMode: params.mode,
     threadRequested: requestThreadBinding,
   });
-  if (spawnMode === "session" && !requestThreadBinding) {
-    return createAcpSpawnFailure({
-      status: "error",
-      errorCode: "thread_required",
-      error:
-        'sessions_spawn(runtime="acp", mode="session") requires thread=true so the ACP session can stay bound to a channel thread. ' +
-        'Retry with { mode: "session", thread: true } on a channel that exposes threads (e.g. Discord, Slack, Telegram topics), or use mode="run" for one-shot work.',
-    });
-  }
+  // OXSCI PATCH: removed upstream "session requires thread=true" guard
+  // to allow persistent A2A sessions (mode=session, thread=false).
 
   const targetAgentResult = resolveTargetAcpAgentId({
     requestedAgentId: params.agentId,

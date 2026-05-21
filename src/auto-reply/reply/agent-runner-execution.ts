@@ -1561,6 +1561,7 @@ export async function runAgentTurnWithFallback(params: {
             blockStreamingEnabled: params.blockStreamingEnabled,
             blockReplyPipeline,
             directlySentBlockKeys,
+            onBlockNotify: params.opts?.onBlockNotify,
           })
         : undefined;
       let messageToolOnlyDeliveryCompleted = false;
@@ -1929,6 +1930,7 @@ export async function runAgentTurnWithFallback(params: {
                       evt.data.args && typeof evt.data.args === "object"
                         ? (evt.data.args as Record<string, unknown>)
                         : undefined;
+                    const meta = readStringValue(evt.data.meta);
                     if (
                       sourceRepliesAreToolOnly &&
                       toolCallId &&
@@ -1947,6 +1949,7 @@ export async function runAgentTurnWithFallback(params: {
                         name,
                         phase,
                         args,
+                        meta,
                         detailMode: params.toolProgressDetail,
                       });
                       await Promise.all([
