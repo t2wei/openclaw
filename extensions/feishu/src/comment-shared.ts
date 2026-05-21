@@ -43,6 +43,17 @@ export function formatFeishuApiError(
       : undefined);
   const nestedError = isRecord(responseData?.error) ? responseData.error : undefined;
 
+  // OXSCI PATCH: surface field_violations + receive_id_type so 400 "field
+  // validation failed" responses are diagnosable from the journal. Default
+  // util.inspect depth collapses these to `[Array]`, which made the original
+  // formatter useless for debugging native Feishu API rejections.
+  const fieldViolations =
+    (Array.isArray(responseData?.field_violations) ? responseData.field_violations : undefined) ??
+    (nestedError && Array.isArray(nestedError.field_violations)
+      ? nestedError.field_violations
+      : undefined);
+  const requestParams = isRecord(config?.params) ? config.params : undefined;
+
   return JSON.stringify({
     message:
       typeof error.message === "string"
@@ -61,6 +72,8 @@ export function formatFeishuApiError(
     feishu_log_id: feishuLogId,
     feishu_troubleshooter:
       readString(responseData?.troubleshooter) || readString(nestedError?.troubleshooter),
+    ...(fieldViolations ? { feishu_field_violations: fieldViolations } : {}),
+    ...(requestParams ? { request_params: requestParams } : {}),
   });
 }
 

@@ -78,6 +78,7 @@ import { resolveFeishuOutboundSessionRoute } from "./session-route.js";
 import { feishuSetupAdapter } from "./setup-core.js";
 import { feishuSetupWizard, runFeishuLogin } from "./setup-surface.js";
 import { looksLikeFeishuId, normalizeFeishuTarget } from "./targets.js";
+import { getTopicReplyTarget } from "./topic-reply-cache.js";
 import type { FeishuConfig, FeishuProbeResult, ResolvedFeishuAccount } from "./types.js";
 
 function readFeishuMediaParam(params: Record<string, unknown>): string | undefined {
@@ -260,7 +261,13 @@ function describeFeishuMessageTool({
   if (enabledAccounts.length === 0) {
     return {
       actions: [],
-      capabilities: enabled ? ["presentation"] : [],
+      // OXSCI PATCH: Do not expose card capability/schema to the message tool.
+      // Card rendering is an internal Feishu plugin concern — the outbound
+      // sendText handler auto-selects card mode based on content (markdown
+      // tables, code blocks). Exposing card JSON to the LLM causes 400 errors
+      // (Feishu ErrCode 200380) when the model generates invalid card JSON.
+      capabilities: [],
+      schema: null,
     };
   }
   const actions = new Set<ChannelMessageActionName>([
@@ -285,7 +292,8 @@ function describeFeishuMessageTool({
   }
   return {
     actions: Array.from(actions),
-    capabilities: enabled ? ["presentation"] : [],
+    capabilities: [],
+    schema: null,
   };
 }
 
@@ -377,8 +385,24 @@ function resolveFeishuTopicAutoThreadAnchor(ctx: FeishuSendActionContext): strin
   if (!isFeishuGroupTopicSessionKey(ctx.sessionKey)) {
     return undefined;
   }
+  // Prefer the inbound message id — the direct reply target inside the topic.
   const inbound = ctx.toolContext?.currentMessageId;
-  return typeof inbound === "string" && inbound.length > 0 ? inbound : undefined;
+  if (typeof inbound === "string" && inbound.length > 0) {
+    return inbound;
+  }
+  // A2A-triggered runs (and any send not anchored to a fresh inbound message)
+  // have no currentMessageId. Without a reply target the send falls back to
+  // im.message.create on the chat, which in a topic-enabled group spawns a NEW
+  // topic in the group root — the regression we are fixing. Fall back to the
+  // cached topic reply target (populated by bot.ts inbound via
+  // rememberTopicReplyTarget) so the message still replies into the topic.
+  // This mirrors the resolveReplyTransport hook used by the outbound adapter.
+  const parsed = parseFeishuConversationId({ conversationId: ctx.sessionKey ?? "" });
+  const topicId = parsed?.topicId;
+  if (typeof topicId === "string" && topicId.length > 0) {
+    return getTopicReplyTarget(topicId) ?? undefined;
+  }
+  return undefined;
 }
 
 function buildFeishuSendReplyAnchor(ctx: FeishuSendActionContext): FeishuActionReplyAnchor {
@@ -1419,5 +1443,38 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount, FeishuProbeResul
         sendText: { resolve: (runtime) => runtime.feishuOutbound.sendText },
         sendMedia: { resolve: (runtime) => runtime.feishuOutbound.sendMedia },
       }),
+    },
+    threading: {
+      resolveAutoThreadId: ({ toolContext, replyToId }) => {
+        if (!toolContext) return undefined;
+        const sessionThreadId = toolContext.messageThreadId ?? toolContext.currentThreadTs;
+        const sessionIsTopic =
+          typeof sessionThreadId === "string" && sessionThreadId.startsWith("omt_");
+        // Feishu topics (omt_*): always echo the topic threadId, even when the
+        // caller supplied an explicit replyToId. Without threadId the outbound
+        // resolver computes replyInThread=false and the reply lands in the
+        // group root instead of inside the topic.
+        if (sessionIsTopic) {
+          return sessionThreadId;
+        }
+        if (replyToId) return undefined;
+        return sessionThreadId ?? undefined;
+      },
+      resolveReplyTransport: ({ threadId, replyToId }) => {
+        // For Feishu topic scopes (omt_*), the topic id itself is NOT a valid
+        // replyToMessageId. Resolve to an om_* reply target so outbound replies
+        // land inside the topic instead of escaping to the group root.
+        //   - If the caller supplied an explicit om_* replyToId (e.g. agent
+        //     replying to a specific message inside the topic), honor it.
+        //   - Otherwise look up the cached topic root populated by bot.ts via
+        //     rememberTopicReplyTarget.
+        if (typeof threadId === "string" && threadId.startsWith("omt_")) {
+          const trimmedCallerReplyToId = replyToId?.trim() || undefined;
+          const resolvedReplyToId = trimmedCallerReplyToId ?? getTopicReplyTarget(threadId);
+          return { replyToId: resolvedReplyToId, threadId };
+        }
+        // Non-topic targets: pass through.
+        return { replyToId: replyToId ?? undefined, threadId };
+      },
     },
   });

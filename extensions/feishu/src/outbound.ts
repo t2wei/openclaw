@@ -405,6 +405,11 @@ function resolveReplyToMessageId(params: {
     return undefined;
   }
   const trimmed = String(params.threadId).trim();
+  // Reject omt_ topic IDs — they are not valid open_message_ids and
+  // would cause a 400 from the Feishu API.
+  if (trimmed.startsWith("omt_")) {
+    return undefined;
+  }
   return trimmed || undefined;
 }
 
@@ -419,7 +424,17 @@ function resolveFeishuMediaReplyMode(params: {
 }): FeishuMediaReplyMode {
   const trimmedReplyToId = params.replyToId?.trim() || undefined;
   const replyToMessageId = resolveReplyToMessageId(params);
-  const replyInThread = params.threadId != null && !trimmedReplyToId;
+  // OxSci patch: when the threadId is a Feishu topic scope (omt_*), force
+  // reply_in_thread=true so the reply stays inside the topic — even when an
+  // explicit reply-target message id is also supplied (e.g., the A2A callback
+  // path passes both the topic root om_* and the topic omt_*). Upstream
+  // PR #77151 derived replyInThread from threadId only when replyToId was
+  // empty, which dropped topic routing for this case and surfaced as
+  // "agent reply appears as a new top-level topic".
+  const trimmedThreadId =
+    params.threadId != null ? String(params.threadId).trim() : "";
+  const isTopicScope = trimmedThreadId.startsWith("omt_");
+  const replyInThread = isTopicScope || (params.threadId != null && !trimmedReplyToId);
   return { replyToMessageId, replyInThread };
 }
 
@@ -543,7 +558,14 @@ export const feishuOutbound: ChannelOutboundAdapter = {
       });
     }
 
-    const replyToMessageId = resolveReplyToMessageId({
+    // OxSci patch: use resolveFeishuMediaReplyMode (which forces
+    // replyInThread=true for `omt_*` topic-scope threadIds) for BOTH the
+    // media-send branch and the card-finalize branch below. Upstream computed
+    // replyInThread inline at the sendCardFeishu callsite as
+    // `ctx.threadId != null && !ctx.replyToId`, which drops the in-topic
+    // routing when both topic root replyToId and topic threadId are present
+    // (the A2A callback path always passes both).
+    const { replyToMessageId, replyInThread } = resolveFeishuMediaReplyMode({
       replyToId: ctx.replyToId,
       threadId: ctx.threadId,
     });
@@ -599,7 +621,7 @@ export const feishuOutbound: ChannelOutboundAdapter = {
             to: ctx.to,
             card,
             replyToMessageId,
-            replyInThread: ctx.threadId != null && !ctx.replyToId,
+            replyInThread,
             accountId: ctx.accountId ?? undefined,
           }),
       }),

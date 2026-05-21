@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OpenClawConfig } from "../runtime-api.js";
 import { feishuPlugin } from "./channel.js";
 import { looksLikeFeishuId, normalizeFeishuTarget, resolveReceiveIdType } from "./targets.js";
+import { clearTopicReplyCacheForTests, rememberTopicReplyTarget } from "./topic-reply-cache.js";
 
 const probeFeishuMock = vi.hoisted(() => vi.fn());
 const createFeishuClientMock = vi.hoisted(() => vi.fn());
@@ -634,6 +635,36 @@ describe("feishuPlugin actions", () => {
       replyToMessageId: "om_inbound",
       replyInThread: true,
     });
+  });
+
+  it("falls back to the cached topic reply target when there is no inbound trigger (A2A callback send)", async () => {
+    // Regression: A2A-callback-triggered runs invoke the `message` tool with no
+    // currentMessageId. Without a fallback the send drops to im.message.create
+    // on the chat, which in a topic-enabled group spawns a NEW topic in the
+    // group root (the duplicated-summary regression). The per-topic reply cache
+    // (populated by bot.ts on inbound) must supply the reply target instead.
+    clearTopicReplyCacheForTests();
+    rememberTopicReplyTarget("omt_cached_topic", "om_cached_root");
+    sendMessageFeishuMock.mockResolvedValueOnce({ messageId: "om_topic", chatId: "oc_group_1" });
+
+    await feishuPlugin.actions?.handleAction?.({
+      action: "send",
+      params: { to: "chat:oc_group_1", text: "A2A summary" },
+      cfg,
+      accountId: undefined,
+      sessionKey: "feishu:group:oc_group_1:topic:omt_cached_topic",
+      toolContext: {},
+    } as never);
+
+    expect(sendMessageFeishuMock).toHaveBeenCalledWith({
+      cfg,
+      to: "chat:oc_group_1",
+      text: "A2A summary",
+      accountId: undefined,
+      replyToMessageId: "om_cached_root",
+      replyInThread: true,
+    });
+    clearTopicReplyCacheForTests();
   });
 
   it("auto-threads `send` cards against the inbound trigger in group_topic sessions", async () => {

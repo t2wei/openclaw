@@ -66,15 +66,93 @@ const MarkdownConfigSchema = z
 const RenderModeSchema = z.enum(["auto", "raw", "card"]).optional();
 
 // Streaming card mode: when enabled, card replies use Feishu's Card Kit streaming API
-// for incremental text display with a "Thinking..." placeholder
-const StreamingModeSchema = z.boolean().optional();
-const BlockStreamingSchema = z.boolean().optional();
+// for incremental text display with a "Thinking..." placeholder.
+//
+// Accepts both the legacy boolean form (`streaming: true|false`) and the unified
+// nested form shared with Telegram/Discord/Slack/MS Teams
+// (`streaming: { mode, chunkMode, preview, progress, block }`). Readers must use
+// the shared resolvers from `openclaw/plugin-sdk/channel-streaming` so both
+// shapes route through the same interpretation logic.
+const TextChunkModeSchema = z.enum(["length", "newline"]);
+const UnifiedStreamingModeSchema = z.enum(["off", "partial", "block", "progress"]);
+const ChannelStreamingCommandTextModeSchema = z.enum(["raw", "status"]);
 
 const BlockStreamingCoalesceSchema = z
   .object({
     enabled: z.boolean().optional(),
     minDelayMs: z.number().int().positive().optional(),
     maxDelayMs: z.number().int().positive().optional(),
+    minChars: z.number().int().positive().optional(),
+    maxChars: z.number().int().positive().optional(),
+    idleMs: z.number().int().nonnegative().optional(),
+  })
+  .strict()
+  .optional();
+
+const BlockStreamingChunkSchema = z
+  .object({
+    minChars: z.number().int().positive().optional(),
+    maxChars: z.number().int().positive().optional(),
+    breakPreference: z.enum(["paragraph", "newline", "sentence"]).optional(),
+  })
+  .strict()
+  .optional();
+
+const ChannelStreamingPreviewSchema = z
+  .object({
+    chunk: BlockStreamingChunkSchema,
+    toolProgress: z.boolean().optional(),
+    commandText: ChannelStreamingCommandTextModeSchema.optional(),
+  })
+  .strict()
+  .optional();
+
+const ChannelStreamingProgressSchema = z
+  .object({
+    label: z.union([z.string(), z.literal(false)]).optional(),
+    labels: z.array(z.string()).optional(),
+    maxLines: z.number().int().positive().optional(),
+    render: z.enum(["text", "rich"]).optional(),
+    toolProgress: z.boolean().optional(),
+    commandText: ChannelStreamingCommandTextModeSchema.optional(),
+  })
+  .strict()
+  .optional();
+
+const ChannelStreamingBlockSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    coalesce: BlockStreamingCoalesceSchema,
+  })
+  .strict()
+  .optional();
+
+const ChannelPreviewStreamingConfigSchema = z
+  .object({
+    mode: UnifiedStreamingModeSchema.optional(),
+    chunkMode: TextChunkModeSchema.optional(),
+    preview: ChannelStreamingPreviewSchema,
+    progress: ChannelStreamingProgressSchema,
+    block: ChannelStreamingBlockSchema,
+  })
+  .strict();
+
+const StreamingModeSchema = z
+  .union([z.boolean(), ChannelPreviewStreamingConfigSchema])
+  .optional();
+const BlockStreamingSchema = z
+  .boolean()
+  .optional()
+  .describe(
+    "Legacy flag — prefer `streaming.block.enabled`. Both are read transparently by the shared resolver helpers.",
+  );
+
+// History panel style for streaming cards (collapsible panel appended on close)
+const HistoryPanelSchema = z
+  .object({
+    title: z.string().optional(),
+    headerBackgroundColor: z.string().optional(),
+    borderColor: z.string().optional(),
   })
   .strict()
   .optional();
@@ -189,6 +267,9 @@ const FeishuSharedConfigShape = {
   dms: z.record(z.string(), DmConfigSchema).optional(),
   textChunkLimit: z.number().int().positive().optional(),
   chunkMode: z.enum(["length", "newline"]).optional(),
+  // Legacy top-level streaming flags. Resolver helpers in
+  // `openclaw/plugin-sdk/channel-streaming` read these as a fallback when
+  // `streaming.block.*` is not set. Prefer the nested form in new configs.
   blockStreaming: BlockStreamingSchema,
   blockStreamingCoalesce: BlockStreamingCoalesceSchema,
   mediaMaxMb: z.number().positive().optional(),
@@ -196,6 +277,8 @@ const FeishuSharedConfigShape = {
   heartbeat: ChannelHeartbeatVisibilitySchema,
   renderMode: RenderModeSchema,
   streaming: StreamingModeSchema,
+  historyPanel: HistoryPanelSchema,
+  historyPanelScope: z.enum(["tool", "all"]).optional(),
   tools: FeishuToolsConfigSchema,
   actions: ChannelActionsSchema,
   replyInThread: ReplyInThreadSchema,

@@ -220,6 +220,67 @@ describe("FeishuConfigSchema optimization flags", () => {
     expect(result.accounts?.main?.blockStreaming).toBe(false);
   });
 
+  it("accepts legacy boolean streaming flag", () => {
+    const result = FeishuConfigSchema.parse({
+      streaming: true,
+      accounts: { main: { streaming: false } },
+    });
+    expect(result.streaming).toBe(true);
+    expect(result.accounts?.main?.streaming).toBe(false);
+  });
+
+  it("accepts unified nested streaming config (mode + block + preview + progress)", () => {
+    const result = FeishuConfigSchema.parse({
+      streaming: {
+        mode: "partial",
+        chunkMode: "length",
+        block: {
+          enabled: true,
+          coalesce: { idleMs: 100, minChars: 200 },
+        },
+        preview: {
+          toolProgress: true,
+          commandText: "raw",
+          chunk: { minChars: 200, maxChars: 800, breakPreference: "paragraph" },
+        },
+        progress: {
+          label: "auto",
+          labels: ["Thinking", "Working"],
+          maxLines: 8,
+          render: "text",
+          toolProgress: true,
+          commandText: "status",
+        },
+      },
+      accounts: {
+        main: {
+          streaming: { mode: "off" },
+        },
+      },
+    });
+
+    expect(typeof result.streaming === "object" ? result.streaming.mode : undefined).toBe(
+      "partial",
+    );
+    expect(
+      typeof result.streaming === "object" ? result.streaming.block?.enabled : undefined,
+    ).toBe(true);
+    expect(
+      typeof result.accounts?.main?.streaming === "object"
+        ? result.accounts.main.streaming.mode
+        : undefined,
+    ).toBe("off");
+  });
+
+  it("rejects unknown keys inside nested streaming config", () => {
+    expect(() =>
+      FeishuConfigSchema.parse({
+        // @ts-expect-error -- intentional bad input
+        streaming: { mode: "partial", unknown: 1 },
+      }),
+    ).toThrow();
+  });
+
   it("accepts account-level optimization flags", () => {
     const result = FeishuConfigSchema.parse({
       accounts: {
