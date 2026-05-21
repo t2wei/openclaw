@@ -1612,6 +1612,7 @@ export function buildGatewaySessionRow(params: {
   now?: number;
   includeDerivedTitles?: boolean;
   includeLastMessage?: boolean;
+  ioStats?: { transcriptReads: number; cacheHits: number };
   transcriptUsageMaxBytes?: number;
   storeChildSessionsByKey?: Map<string, string[]>;
   rowContext?: SessionListRowContext;
@@ -1821,12 +1822,15 @@ export function buildGatewaySessionRow(params: {
 
   let derivedTitle: string | undefined;
   let lastMessagePreview: string | undefined;
+  // Note: includeDerivedTitles/includeLastMessage trigger per-session transcript reads.
+  // sessions.list should NOT request these — only single-session detail views should.
   if (entry?.sessionId && (params.includeDerivedTitles || params.includeLastMessage)) {
     const fields = readSessionTitleFieldsFromTranscript(
       entry.sessionId,
       storePath,
       entry.sessionFile,
       sessionAgentId,
+      params.ioStats ? { ioStats: params.ioStats } : undefined,
     );
     if (params.includeDerivedTitles) {
       derivedTitle = deriveSessionTitle(entry, fields.firstUserMessage);
