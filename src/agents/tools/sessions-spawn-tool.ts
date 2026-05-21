@@ -152,7 +152,13 @@ function createSessionsSpawnToolSchema(params: {
   acpAvailable: boolean;
   threadAvailable: boolean;
 }) {
-  const spawnModes = params.threadAvailable ? SUBAGENT_SPAWN_MODES : (["run"] as const);
+  // OxSci patch: decouple session mode lifecycle from thread-binding capability.
+  // Upstream restricts `mode: "session"` to channels that can auto-create a new
+  // thread for the spawn (8612af754b "simplify thread-bound session spawning").
+  // For Feishu topic-bound parents we want persistent ACP children inside the
+  // existing topic without spawning a fresh thread — `mode` and `thread` are
+  // orthogonal concerns. The `thread` parameter is still gated below.
+  const spawnModes = SUBAGENT_SPAWN_MODES;
   const schema = {
     task: Type.String(),
     taskName: Type.Optional(

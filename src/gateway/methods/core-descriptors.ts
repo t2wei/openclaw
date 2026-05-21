@@ -139,6 +139,7 @@ export const CORE_GATEWAY_METHOD_SPECS: readonly CoreGatewayMethodSpec[] = [
   { name: "sessions.pluginPatch", scope: "operator.admin" },
   { name: "sessions.cleanup", scope: "operator.admin" },
   { name: "sessions.reset", scope: "operator.admin" },
+  { name: "sessions.cancel", scope: "operator.admin" },
   { name: "sessions.delete", scope: "operator.admin" },
   { name: "sessions.compact", scope: "operator.admin" },
   { name: "last-heartbeat", scope: "operator.read" },

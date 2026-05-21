@@ -35,6 +35,7 @@ packageExtensionsChecksum: sha256-oc/FAHkBR844HBfph1RZWyRMHHBpIFya25tyv5SGf6s=
 
 patchedDependencies:
   '@agentclientprotocol/claude-agent-acp@0.36.1': f4f95d000b8694ca27dbbb969a7ebbfa9e45001e245a927201cb8bc43b6be641
+  acpx@0.8.0: 31ff449bb55a8f00fef1653bd3b0e66041f9e07c6f80ec3bdc4ae182eeb89257
   baileys@7.0.0-rc12: f2bd4db8403598ce9e4efafe859a27443a41c5ce25d97218de69169b4c03e18c
 
 importers:
@@ -279,7 +280,7 @@ importers:
         version: 0.14.0
       acpx:
         specifier: 0.8.0
-        version: 0.8.0
+        version: 0.8.0(patch_hash=31ff449bb55a8f00fef1653bd3b0e66041f9e07c6f80ec3bdc4ae182eeb89257)
       zod:
         specifier: 4.4.3
         version: 4.4.3
@@ -4957,6 +4958,10 @@ packages:
   delayed-stream@1.0.0:
     resolution: {integrity: sha512-ZySD7Nf91aLB0RxL4KGrKHBXl7Eds1DAmEdcoVawXnLD7SDhpNgtuII2aAkg7a7QS41jxPSZ17p4VdGnMHk3MQ==}
     engines: {node: '>=0.4.0'}
+
+  denque@2.1.0:
+    resolution: {integrity: sha512-HVQE3AAb/pxF8fQAoiqpvg9i3evqug3hoiwakOyZAwJm+6vZehbkYXZ0l4JxS+I3QxM97v5aaRNhj8v5oBhekw==}
+    engines: {node: '>=0.10'}
 
   depd@2.0.0:
     resolution: {integrity: sha512-g7nH6P6dyDioJogAAGprGpCtVImJhpPk/roCzdb3fIh61/s/nPsfR6onyMwkCAR/OlC3yBC0lESvUoQEAssIrw==}
@@ -10431,7 +10436,7 @@ snapshots:
 
   acorn@8.16.0: {}
 
-  acpx@0.8.0:
+  acpx@0.8.0(patch_hash=31ff449bb55a8f00fef1653bd3b0e66041f9e07c6f80ec3bdc4ae182eeb89257):
     dependencies:
       '@agentclientprotocol/sdk': 0.21.1(zod@4.4.3)
       commander: 14.0.3
@@ -10878,6 +10883,8 @@ snapshots:
   defu@6.1.5: {}
 
   delayed-stream@1.0.0: {}
+
+  denque@2.1.0: {}
 
   depd@2.0.0: {}
 

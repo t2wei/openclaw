@@ -26,6 +26,11 @@ export type GatewayAgentRow = {
   agentRuntime?: GatewayAgentRuntime;
 };
 
+export type SessionsListIoStats = {
+  transcriptReads: number;
+  cacheHits: number;
+};
+
 export type SessionsListResultBase<TDefaults, TRow> = {
   ts: number;
   path: string;
@@ -35,6 +40,7 @@ export type SessionsListResultBase<TDefaults, TRow> = {
   hasMore?: boolean;
   defaults: TDefaults;
   sessions: TRow[];
+  ioStats?: SessionsListIoStats;
 };
 
 export type SessionsPatchResultBase<TEntry> = {

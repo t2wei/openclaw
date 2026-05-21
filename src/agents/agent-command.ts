@@ -10,7 +10,10 @@ import {
 import { formatCliCommand } from "../cli/command-format.js";
 import type { CliDeps } from "../cli/deps.types.js";
 import { getRuntimeConfig } from "../config/io.js";
+import { extractDeliveryInfo } from "../config/sessions/delivery-info.js";
+import { loadSessionStore } from "../config/sessions/store.js";
 import type { SessionEntry } from "../config/sessions/types.js";
+import { callGateway } from "../gateway/call.js";
 import { withLocalGatewayRequestScope } from "../gateway/local-request-context.js";
 import {
   clearAgentRunContext,
@@ -19,6 +22,7 @@ import {
 } from "../infra/agent-events.js";
 import { formatErrorMessage } from "../infra/errors.js";
 import { buildOutboundSessionContext } from "../infra/outbound/session-context.js";
+import { generateSecureUuid } from "../infra/secure-random.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { loadManifestMetadataSnapshot } from "../plugins/manifest-contract-eligibility.js";
 import {
@@ -69,7 +73,7 @@ import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "./defaults.js";
 import { resolveFastModeState } from "./fast-mode.js";
 import { ensureSelectedAgentHarnessPlugin } from "./harness/runtime-plugin.js";
 import { resolveAvailableAgentHarnessPolicy } from "./harness/selection.js";
-import { AGENT_LANE_SUBAGENT } from "./lanes.js";
+import { AGENT_LANE_NESTED, AGENT_LANE_SUBAGENT } from "./lanes.js";
 import { LiveSessionModelSwitchError } from "./live-model-switch.js";
 import { loadManifestModelCatalog } from "./model-catalog.js";
 import { runWithModelFallback } from "./model-fallback.js";
@@ -662,6 +666,76 @@ async function agentCommandInternal(
       });
       const payloads = result.payloads;
       const { deliverAgentCommandResult } = await loadDeliveryRuntime();
+
+      // A2A callback — inject ACP output into parent session.
+      // Must be here (before the ACP early-return) because the ACP code path
+      // returns from deliverAgentCommandResult below and never reaches the
+      // non-ACP callback site further down.
+      //
+      // Fires for ALL ACP turns (spawn + acp_send). The parent agent decides
+      // whether and how to relay the output to the user (may reply NO_REPLY).
+      //
+      // deliver: true — let the parent agent run deliver its reply to the
+      // external channel. Channel routing is explicitly passed from the parent
+      // session's delivery context so followup delivery routes correctly
+      // regardless of parent session entry mutations (race-safe).
+      if (!opts.deliver && sessionEntry?.spawnedBy && finalText) {
+        // Re-read from disk to pick up lastCallerSessionKey written by acp_send
+        // during this run. sessionEntry and sessionStore are stale snapshots
+        // from run start; sessions.patch writes to the gateway's own store
+        // and flushes to disk, so loadSessionStore sees the latest value.
+        const freshStore = storePath ? loadSessionStore(storePath) : undefined;
+        const freshRaw = sessionKey ? freshStore?.[sessionKey] : undefined;
+        const freshLastCaller =
+          freshRaw && typeof freshRaw === "object" && "lastCallerSessionKey" in freshRaw
+            ? freshRaw.lastCallerSessionKey
+            : undefined;
+        const parentKey = freshLastCaller ?? sessionEntry.spawnedBy;
+        const acpAgent = resolveAgentIdFromSessionKey(sessionKey);
+        const {
+          deliveryContext: parentDelivery,
+          threadId: parentThreadId,
+        } = extractDeliveryInfo(parentKey);
+        log.info?.(
+          `[A2A callback] session=${sessionKey} → parent=${parentKey} agent=${acpAgent} textLen=${finalText.length} channel=${parentDelivery?.channel ?? "unknown"}`,
+        );
+        void callGateway({
+          method: "agent",
+          params: {
+            message: finalText,
+            sessionKey: parentKey,
+            idempotencyKey: generateSecureUuid(),
+            deliver: true,
+            bestEffortDeliver: true,
+            channel: parentDelivery?.channel,
+            to: parentDelivery?.to,
+            threadId: parentThreadId,
+            accountId: parentDelivery?.accountId,
+            lane: AGENT_LANE_NESTED,
+            extraSystemPrompt: [
+              "ACP callback: the following is output from an ACP agent turn.",
+              `ACP agent: ${acpAgent}.`,
+              `ACP session: ${sessionKey}.`,
+              ...(sessionEntry?.label ? [`ACP label: ${sessionEntry.label}.`] : []),
+              "Decide how to relay this to the user.",
+            ].join("\n"),
+            inputProvenance: {
+              kind: "inter_session",
+              sourceSessionKey: sessionKey,
+              sourceTool: "acp_callback",
+            },
+          },
+          timeoutMs: 15_000,
+        })
+          .then(() => {
+            log.info?.(`[A2A callback] sent OK → parent=${parentKey}`);
+          })
+          .catch((err) => {
+            log.warn?.(
+              `[A2A callback] FAILED → parent=${parentKey}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          });
+      }
 
       return await deliverAgentCommandResult({
         cfg,

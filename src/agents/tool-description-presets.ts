@@ -42,8 +42,8 @@ export function describeSessionsSpawnTool(options?: {
   const baseDescription = [
     runtimeDescription,
     options?.threadAvailable
-      ? '`mode="run"` one-shot; `mode="session"` persistent/thread-bound.'
-      : '`mode="run"` one-shot background work.',
+      ? '`mode="run"` one-shot; `mode="session"` persistent and may be thread-bound.'
+      : '`mode="run"` one-shot background work; `mode="session"` keeps child persistent for follow-up turns (e.g. multi-turn ACP A2A).',
     "Subagents inherit parent workspace.",
     "Native subagents get task in first visible `[Subagent Task]` message.",
     'Native only: `context="fork"` only when child needs current transcript; else omit or `isolated`.',

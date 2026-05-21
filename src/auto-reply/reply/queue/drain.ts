@@ -295,6 +295,9 @@ export function scheduleFollowupDrain(
   key: string,
   runFollowup: (run: FollowupRun) => Promise<void>,
 ): void {
+  // Cache the callback eagerly so kickFollowupDrainIfIdle can restart a drain
+  // when a message is enqueued while a run is active.
+  FOLLOWUP_RUN_CALLBACKS.set(key, runFollowup);
   const queue = beginQueueDrain(FOLLOWUP_QUEUES, key);
   if (!queue) {
     return;

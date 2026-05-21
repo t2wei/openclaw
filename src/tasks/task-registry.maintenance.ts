@@ -618,18 +618,6 @@ function isParentOwnedAcpSessionEntry(acpEntry: Pick<AcpSessionStoreEntry, "entr
   return getAcpSessionParentKeys(acpEntry).length > 0;
 }
 
-function hasActiveSessionBinding(sessionKey: string): boolean {
-  const listBindings = taskRegistryMaintenanceRuntime.listSessionBindingsBySession;
-  if (!listBindings) {
-    return true;
-  }
-  try {
-    return listBindings(sessionKey).some((binding) => binding.status !== "ended");
-  } catch {
-    return true;
-  }
-}
-
 function shouldCloseTerminalAcpSession(task: TaskRecord): boolean {
   if (task.runtime !== "acp" || isActiveTask(task)) {
     return false;
@@ -654,7 +642,13 @@ function shouldCloseTerminalAcpSession(task: TaskRecord): boolean {
   if (acpEntry.acp.mode === "oneshot") {
     return true;
   }
-  return !hasActiveSessionBinding(sessionKey);
+  // OxSci patch: persistent ACP sessions (mode="persistent") without a thread
+  // binding rely on explicit lifecycle — parent closes via /acp close, or ACP
+  // runtime idle TTL (acp.runtime.ttlMinutes) recycles them. Don't auto-close
+  // on child-task terminal: the parent may queue more acp_send turns
+  // (multi-turn A2A in Feishu topics, where threadAvailable=false). The
+  // orphaned-parent path below still cleans up when the parent is gone.
+  return false;
 }
 
 function shouldCloseOrphanedParentOwnedAcpSession(acpEntry: AcpSessionStoreEntry): boolean {
@@ -671,7 +665,12 @@ function shouldCloseOrphanedParentOwnedAcpSession(acpEntry: AcpSessionStoreEntry
   if (acpEntry.acp.mode === "oneshot") {
     return true;
   }
-  return !hasActiveSessionBinding(sessionKey);
+  // OxSci patch: symmetric to shouldCloseTerminalAcpSession — persistent ACP
+  // sessions in Feishu topics have no thread binding (threadAvailable=false),
+  // so this sweep would otherwise strip their metadata between turns and
+  // break multi-turn A2A with `ACP metadata is missing`. Defer cleanup to
+  // ACP runtime idle TTL (acp.runtime.ttlMinutes) or explicit /acp close.
+  return false;
 }
 
 async function cleanupTerminalAcpSession(task: TaskRecord): Promise<void> {
