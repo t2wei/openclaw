@@ -824,6 +824,8 @@ type MessageToolOptions = {
   currentChannelProvider?: string;
   currentThreadTs?: string;
   agentThreadId?: string | number;
+  /** Raw session thread scope ID (may be platform-specific, e.g. Feishu omt_). */
+  messageThreadId?: string;
   currentMessageId?: string | number;
   currentInboundAudio?: boolean;
   replyToMode?: "off" | "first" | "all" | "batched";
@@ -1358,6 +1360,7 @@ export function createMessageTool(options?: MessageToolOptions): AnyAgentTool {
         effectiveCurrentChannel.currentChannelProvider ||
         effectiveCurrentChannel.currentMessagingTarget ||
         currentThreadTs ||
+        options?.messageThreadId ||
         hasCurrentMessageId ||
         replyToMode ||
         options?.hasRepliedRef ||
@@ -1367,6 +1370,7 @@ export function createMessageTool(options?: MessageToolOptions): AnyAgentTool {
               currentMessagingTarget: effectiveCurrentChannel.currentMessagingTarget,
               currentChannelProvider: effectiveCurrentChannel.currentChannelProvider,
               currentThreadTs,
+              messageThreadId: options?.messageThreadId,
               currentMessageId: options?.currentMessageId,
               replyToMode,
               hasRepliedRef: options?.hasRepliedRef,

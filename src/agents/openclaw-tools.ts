@@ -117,6 +117,8 @@ export function createOpenClawTools(
     currentMessagingTarget?: string;
     /** Current thread timestamp for auto-threading. */
     currentThreadTs?: string;
+    /** Raw session thread scope ID (may be platform-specific, e.g. Feishu omt_). */
+    messageThreadId?: string | number;
     /** Current inbound message id for action fallbacks. */
     currentMessageId?: string | number;
     /** True when the current inbound turn carried audio media. */
@@ -352,6 +354,8 @@ export function createOpenClawTools(
         currentThreadTs: options?.currentThreadTs,
         currentInboundAudio: options?.currentInboundAudio,
         agentThreadId: options?.agentThreadId,
+        messageThreadId:
+          options?.messageThreadId != null ? String(options.messageThreadId) : undefined,
         currentMessageId: options?.currentMessageId,
         replyToMode: options?.replyToMode,
         hasRepliedRef: options?.hasRepliedRef,

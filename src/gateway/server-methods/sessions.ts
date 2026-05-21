@@ -120,6 +120,7 @@ import {
   type SessionsPreviewEntry,
   type SessionsPreviewResult,
 } from "../session-utils.js";
+import { evaluateSessionVisibility, filterSessionsByPeerIds } from "../session-visibility.js";
 import { applySessionsPatchToStore, projectSessionsPatchEntry } from "../sessions-patch.js";
 import { resolveSessionKeyFromResolveParams } from "../sessions-resolve.js";
 import { setGatewayDedupeEntry } from "./agent-wait-dedupe.js";
@@ -910,12 +911,28 @@ async function handleSessionSend(params: {
   }
 }
 export const sessionsHandlers: GatewayRequestHandlers = {
-  "sessions.list": async ({ params, respond, context }) => {
+  "sessions.list": async ({ params, respond, context, client }) => {
     if (!assertValidParams(params, validateSessionsListParams, "sessions.list", respond)) {
       return;
     }
     const p = params;
     const cfg = context.getRuntimeConfig();
+
+    // Session visibility filtering (fork addition)
+    const visibilityConfig = cfg.gateway?.controlUi?.sessionVisibility;
+    const visibilityDecision = evaluateSessionVisibility(visibilityConfig, {
+      authUser: client?.authUser,
+      authClaims: client?.authClaims,
+    });
+    if (visibilityDecision && !visibilityDecision.allowed) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "access denied: organization not allowed"),
+      );
+      return;
+    }
+
     const configuredAgentsOnly = p.configuredAgentsOnly === true;
     const payload = await measureDiagnosticsTimelineSpan(
       "gateway.sessions.list",
@@ -987,9 +1004,15 @@ export const sessionsHandlers: GatewayRequestHandlers = {
             },
           },
         );
+        // Apply peer-based filtering for session visibility (fork addition).
+        const filteredSessions =
+          visibilityDecision && !visibilityDecision.isAdmin
+            ? filterSessionsByPeerIds(sessions, visibilityDecision.peerIds)
+            : sessions;
         return {
           ...result,
-          sessions,
+          sessions: filteredSessions,
+          count: filteredSessions.length,
         };
       },
       {
