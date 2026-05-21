@@ -212,6 +212,11 @@ export type SessionConfig = {
   threadBindings?: SessionThreadBindingsConfig;
   /** Automatic session store maintenance (pruning, capping, archive retention, disk budget). */
   maintenance?: SessionMaintenanceConfig;
+  /** Redis session mirror backend. */
+  redis?: {
+    url?: string;
+    keyPrefix?: string;
+  };
 };
 
 export type SessionWriteLockConfig = {
