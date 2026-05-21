@@ -14,6 +14,7 @@ import type { DeliveryContext } from "../../utils/delivery-context.types.js";
 import { getFileStatSnapshot } from "../cache-utils.js";
 import { enforceSessionDiskBudget, type SessionDiskBudgetSweepResult } from "./disk-budget.js";
 import { deriveSessionMetaPatch } from "./metadata.js";
+import { isRedisSessionBackendActive, updateRedisSessionMirror } from "./redis-backend.js";
 import {
   dropSessionStoreObjectCache,
   getSerializedSessionStore,
@@ -151,6 +152,11 @@ function updateSessionStoreWriteCaches(params: {
     sizeBytes: fileStat?.sizeBytes,
     serialized: params.serialized,
   });
+
+  // Keep Redis mirror in sync after every write.
+  if (isRedisSessionBackendActive()) {
+    updateRedisSessionMirror(params.storePath, params.store, params.serialized);
+  }
 }
 
 function loadMutableSessionStoreForWriter(storePath: string): Record<string, SessionEntry> {
