@@ -1,0 +1,63 @@
+# Dockerfile.oxsci - OxSci 应用镜像
+#
+# 基于 oxsci-base（Node.js + Bun + pnpm + AWS CLI + gh + ssh），
+# 只做 pnpm install + build，构建速度快。
+#
+# 认证方式：
+#   - git/gh：EFS 挂载的 /opt/openclaw/.ssh/id_ed25519_oxsciclaw
+#   - aws：ECS Task Role (oxsci-ox-role, AdministratorAccess)
+#
+# 构建：
+#   docker build -f Dockerfile.oxsci \
+#     --build-arg OPENCLAW_VERSION=2026.3.3-abc1234 \
+#     -t openclaw:oxsci .
+
+ARG BASE_IMAGE=000373574646.dkr.ecr.ap-southeast-1.amazonaws.com/oxsci/openclaw-base:latest
+FROM ${BASE_IMAGE}
+
+# --- Dependencies (cacheable when lockfile unchanged) ---
+COPY --chown=node:node package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY --chown=node:node ui/package.json ./ui/package.json
+COPY --chown=node:node patches ./patches
+COPY --chown=node:node scripts ./scripts
+# Copy extensions/packages dirs so pnpm install resolves all workspace dependencies
+COPY --chown=node:node extensions ./extensions
+COPY --chown=node:node packages ./packages
+
+USER node
+RUN NODE_OPTIONS=--max-old-space-size=2048 pnpm install --frozen-lockfile
+
+# --- Build application ---
+USER node
+COPY --chown=node:node . .
+# Normalize extension/agent directory permissions (upstream security fix)
+USER root
+RUN for dir in /app/extensions /app/.agent /app/.agents; do \
+      if [ -d "$dir" ]; then \
+        find "$dir" -type d -exec chmod 755 {} +; \
+        find "$dir" -type f -exec chmod 644 {} +; \
+      fi; \
+    done
+USER node
+RUN pnpm build
+ENV OPENCLAW_PREFER_PNPM=1
+RUN pnpm ui:build
+
+# Install jq (required by skills that parse JSON)
+# Expose CLI binary without requiring npm global writes as non-root
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends jq \
+ && rm -rf /var/lib/apt/lists/*
+RUN ln -sf /app/openclaw.mjs /usr/local/bin/openclaw \
+ && chmod 755 /app/openclaw.mjs
+
+ARG OPENCLAW_VERSION="dev"
+ENV OPENCLAW_VERSION=${OPENCLAW_VERSION}
+ENV NODE_ENV=production
+
+# node user = uid 1000, 与 EFS 文件权限一致 (ubuntu:ubuntu = 1000:1000)
+USER node
+
+HEALTHCHECK --interval=3m --timeout=10s --start-period=15s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:18789/healthz').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+CMD ["node", "openclaw.mjs", "gateway", "--allow-unconfigured"]
