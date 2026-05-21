@@ -264,6 +264,19 @@ export async function projectSessionsPatchEntry(params: {
     }
   }
 
+  if ("lastCallerSessionKey" in patch) {
+    const raw = patch.lastCallerSessionKey;
+    if (raw === null) {
+      next.lastCallerSessionKey = undefined;
+    } else if (raw !== undefined) {
+      const trimmed = String(raw).trim();
+      if (!trimmed) {
+        return invalid("invalid lastCallerSessionKey: empty");
+      }
+      next.lastCallerSessionKey = trimmed;
+    }
+  }
+
   if ("spawnDepth" in patch) {
     const raw = patch.spawnDepth;
     if (raw === null) {

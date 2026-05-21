@@ -311,6 +311,8 @@ import {
   SecretsResolveResultSchema,
   type SessionsAbortParams,
   SessionsAbortParamsSchema,
+  type SessionsCancelParams,
+  SessionsCancelParamsSchema,
   type SessionsCompactParams,
   SessionsCompactParamsSchema,
   type SessionsCleanupParams,
@@ -674,6 +676,9 @@ export const validateSessionsPluginPatchParams = lazyCompile<SessionsPluginPatch
 );
 export const validateSessionsResetParams =
   lazyCompile<SessionsResetParams>(SessionsResetParamsSchema);
+export const validateSessionsCancelParams = lazyCompile<SessionsCancelParams>(
+  SessionsCancelParamsSchema,
+);
 export const validateSessionsDeleteParams = lazyCompile<SessionsDeleteParams>(
   SessionsDeleteParamsSchema,
 );
@@ -1053,6 +1058,7 @@ export {
   SessionsPatchParamsSchema,
   SessionsPluginPatchParamsSchema,
   SessionsResetParamsSchema,
+  SessionsCancelParamsSchema,
   SessionsDeleteParamsSchema,
   SessionsCompactParamsSchema,
   SessionsUsageParamsSchema,
@@ -1374,6 +1380,7 @@ export type {
   SessionsPatchParams,
   SessionsPatchResult,
   SessionsResetParams,
+  SessionsCancelParams,
   SessionsDeleteParams,
   SessionsCompactParams,
   SessionsUsageParams,
