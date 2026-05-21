@@ -2313,7 +2313,6 @@ export async function runAgentTurnWithFallback(params: {
                         name,
                         phase,
                         args,
-                        meta,
                         detailMode: params.toolProgressDetail,
                       }),
                     ]);

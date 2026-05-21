@@ -323,7 +323,15 @@ export function createSessionsSpawnTool(
       const context =
         params.context === "fork" || params.context === "isolated" ? params.context : undefined;
       const streamTo = runtime === "acp" && params.streamTo === "parent" ? "parent" : undefined;
-      const lightContext = params.lightContext === true;
+      // OXSCI: silently drop lightContext for runtime="acp" — it's a
+      // subagent-only optimization, but LLMs sometimes pass it anyway. Failing
+      // the spawn here forces a wasted retry; ignoring is functionally
+      // equivalent for ACP. Schema description already states subagent-only.
+      const lightContext = params.lightContext === true && runtime !== "acp";
+      // OXSCI: same rationale for "thinking" — ACP backends reject it with
+      // ACP_BACKEND_UNSUPPORTED_CONTROL. Silently drop here for runtime="acp"
+      // to avoid a wasted spawn retry. Subagent runtime keeps the override.
+      const thinkingOverride = runtime === "acp" ? undefined : thinkingOverrideRaw;
       const roleContext = requestedAgentId ? { role: requestedAgentId } : {};
       if (runtime === "acp" && !acpAvailable) {
         return jsonResult({
@@ -353,9 +361,6 @@ export function createSessionsSpawnTool(
           error: formatAcpInheritedToolAllowError(acpUnsupportedInheritedAllow),
           ...roleContext,
         });
-      }
-      if (runtime === "acp" && lightContext) {
-        throw new Error("lightContext is only supported for runtime='subagent'.");
       }
       if (runtime === "acp" && context === "fork") {
         throw new Error('context="fork" is only supported for runtime="subagent".');
@@ -390,7 +395,7 @@ export function createSessionsSpawnTool(
             agentId: requestedAgentId,
             resumeSessionId,
             model: modelOverride,
-            thinking: thinkingOverrideRaw,
+            thinking: thinkingOverride,
             cwd,
             mode: mode === "run" || mode === "session" ? mode : undefined,
             thread,
@@ -478,7 +483,7 @@ export function createSessionsSpawnTool(
           label: label || undefined,
           agentId: requestedAgentId,
           model: modelOverride,
-          thinking: thinkingOverrideRaw,
+          thinking: thinkingOverride,
           cwd,
           thread,
           mode,
