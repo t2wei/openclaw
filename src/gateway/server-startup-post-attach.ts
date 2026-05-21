@@ -842,6 +842,35 @@ export async function startGatewaySidecars(params: {
   }
   params.onPluginServices?.(pluginServices);
 
+  // OXSCI: initialize Redis session backend after plugin services so that
+  // session store reads/writes mirror through Redis when configured.
+  if (params.cfg.session?.redis?.url) {
+    try {
+      const { initRedisSessionBackend } = await import("../config/sessions/redis-backend.js");
+      const { resolveStorePath } = await import("../config/sessions/paths.js");
+      const { loadSessionStore } = await import("../config/sessions/store.js");
+      const storePath = resolveStorePath(params.cfg.session?.store);
+      await initRedisSessionBackend(
+        {
+          redisUrl: params.cfg.session.redis.url,
+          storePaths: [storePath],
+          keyPrefix: params.cfg.session.redis.keyPrefix,
+        },
+        (sp) => {
+          try {
+            const store = loadSessionStore(sp, { skipCache: true });
+            const serialized = JSON.stringify(store);
+            return { store, serialized };
+          } catch {
+            return undefined;
+          }
+        },
+      );
+    } catch (err) {
+      params.log.warn(`redis session backend init failed: ${String(err)}`);
+    }
+  }
+
   const shouldDispatchGatewayStartupInternalHook =
     internalHooksConfigured || (await hasGatewayStartupInternalHookListeners());
   if (shouldDispatchGatewayStartupInternalHook) {
