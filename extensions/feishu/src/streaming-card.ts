@@ -499,7 +499,19 @@ export class FeishuStreamingSession {
       .catch((e) => this.log?.(`Note update failed: ${String(e)}`));
   }
 
-  async close(finalText?: string, options?: { note?: string }): Promise<void> {
+  async close(
+    finalText?: string,
+    options?: {
+      note?: string;
+      addFullTextPanel?: boolean;
+      historyText?: string;
+      panelStyle?: {
+        title?: string;
+        headerBackgroundColor?: string;
+        borderColor?: string;
+      };
+    },
+  ): Promise<void> {
     if (!this.state || this.closed) {
       return;
     }
@@ -507,6 +519,8 @@ export class FeishuStreamingSession {
     this.clearFlushTimer();
     await this.queue;
 
+    // When finalText is provided, use it directly — it is the definitive card
+    // content and should replace whatever was displayed during streaming.
     const pendingMerged = mergeStreamingText(this.state.currentText, this.pendingText ?? undefined);
     const text = finalText ?? pendingMerged;
     const apiBase = resolveApiBase(this.creds.domain);
@@ -532,32 +546,105 @@ export class FeishuStreamingSession {
       await this.updateNoteContent(options.note);
     }
 
-    // Close streaming mode
+    // Close streaming mode (and optionally append history panel)
+    // via batch_update API to combine both operations in a single request.
     this.state.sequence += 1;
-    await fetchWithSsrFGuard({
-      url: `${apiBase}/cardkit/v1/cards/${this.state.cardId}/settings`,
-      init: {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${await getToken(this.creds)}`,
-          "Content-Type": "application/json; charset=utf-8",
-          "User-Agent": getFeishuUserAgent(),
-        },
-        body: JSON.stringify({
-          settings: JSON.stringify({
+    const batchActions: Record<string, unknown>[] = [
+      {
+        action: "partial_update_setting",
+        params: {
+          settings: {
             config: { streaming_mode: false, summary: { content: truncateSummary(text) } },
-          }),
-          sequence: this.state.sequence,
-          uuid: `c_${this.state.cardId}_${this.state.sequence}`,
-        }),
+          },
+        },
       },
-      policy: { allowedHostnames: resolveAllowedHostnames(this.creds.domain) },
-      auditContext: "feishu.streaming-card.close",
-    })
-      .then(async ({ release }) => {
-        await release();
-      })
-      .catch((e) => this.log?.(`Close failed: ${String(e)}`));
+    ];
+
+    // OxSci fix: previously gated on `text` (final card body) being non-empty,
+    // but panel content actually falls back to `historyText`. When the model
+    // emits only block events (no partial reply) or completes via tool calls
+    // alone, `text` is empty yet historyText carries the full activity trail —
+    // we still want the panel to render.
+    const panelContent = options?.addFullTextPanel
+      ? (options.historyText ?? text)
+      : undefined;
+    if (options?.addFullTextPanel && panelContent) {
+      const ps = options.panelStyle;
+      const headerBg = ps?.headerBackgroundColor;
+      const borderColor = ps?.borderColor ?? "grey";
+      batchActions.push({
+        action: "add_elements",
+        params: {
+          type: "append",
+          elements: [
+            {
+              tag: "collapsible_panel",
+              expanded: false,
+              header: {
+                title: {
+                  tag: "plain_text",
+                  content: ps?.title ?? "history",
+                },
+                ...(headerBg ? { background_color: headerBg } : {}),
+                vertical_align: "center",
+                icon: {
+                  tag: "standard_icon",
+                  token: "down-small-ccm_outlined",
+                  size: "16px 16px",
+                },
+                icon_position: "follow_text",
+                icon_expanded_angle: -180,
+              },
+              border: { color: borderColor, corner_radius: "5px" },
+              padding: "8px 8px 8px 8px",
+              element_id: "full_text_panel",
+              elements: [
+                {
+                  tag: "markdown",
+                  content: panelContent,
+                  text_size: "notation",
+                  element_id: "full_text_content",
+                },
+              ],
+            },
+          ],
+        },
+      });
+    }
+
+    try {
+      const { response, release } = await fetchWithSsrFGuard({
+        url: `${apiBase}/cardkit/v1/cards/${this.state.cardId}/batch_update`,
+        init: {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${await getToken(this.creds)}`,
+            "Content-Type": "application/json; charset=utf-8",
+          },
+          body: JSON.stringify({
+            actions: JSON.stringify(batchActions),
+            sequence: this.state.sequence,
+            uuid: `c_${this.state.cardId}_${this.state.sequence}`,
+          }),
+        },
+        policy: { allowedHostnames: resolveAllowedHostnames(this.creds.domain) },
+        auditContext: "feishu.streaming-card.close",
+      });
+      try {
+        const respData = (await response.json()) as { code?: number; msg?: string };
+        if (respData.code !== 0) {
+          this.log?.(
+            `batch_update failed: code=${respData.code}, msg=${respData.msg ?? "unknown"}`,
+          );
+        }
+      } catch (parseErr) {
+        this.log?.(`batch_update response parse error: ${String(parseErr)}`);
+      } finally {
+        release();
+      }
+    } catch (e) {
+      this.log?.(`Close failed: ${String(e)}`);
+    }
     const finalState = this.state;
     this.state = null;
     this.pendingText = null;
@@ -567,5 +654,9 @@ export class FeishuStreamingSession {
 
   isActive(): boolean {
     return this.state !== null && !this.closed;
+  }
+
+  getMessageId(): string | undefined {
+    return this.state?.messageId;
   }
 }

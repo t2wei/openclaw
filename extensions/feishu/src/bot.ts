@@ -56,6 +56,7 @@ import { resolveFeishuReasoningPreviewEnabled } from "./reasoning-preview.js";
 import { createFeishuReplyDispatcher } from "./reply-dispatcher.js";
 import { getFeishuRuntime } from "./runtime.js";
 import { getMessageFeishu, listFeishuThreadMessages, sendMessageFeishu } from "./send.js";
+import { rememberTopicReplyTarget } from "./topic-reply-cache.js";
 export type { FeishuBotAddedEvent, FeishuMessageEvent } from "./event-types.js";
 import type { FeishuMessageEvent } from "./event-types.js";
 import {
@@ -573,6 +574,11 @@ export async function handleFeishuMessage(params: {
       );
     }
   }
+  // Remember the latest om_* observed inside this topic so that the
+  // resolveReplyTransport hook can later produce a valid replyToMessageId
+  // for outbound replies (Feishu omt_* is NOT a valid reply target). The
+  // function is a no-op when effectiveThreadId is not an omt_* topic scope.
+  rememberTopicReplyTarget(effectiveThreadId, ctx.messageId);
   const effectiveGroupSenderAllowFrom = isGroup
     ? (groupConfig?.allowFrom?.length ?? 0) > 0
       ? (groupConfig?.allowFrom ?? [])
@@ -1275,6 +1281,7 @@ export async function handleFeishuMessage(params: {
         InboundHistory: inboundHistory,
         ReplyToId: ctx.parentId,
         RootMessageId: ctx.rootId,
+        MessageThreadId: groupSession?.topicScope ?? ctx.rootId,
         RawBody: agentFacingContent,
         CommandBody: agentFacingContent,
         Transcript: audioTranscript,
@@ -1294,9 +1301,6 @@ export async function handleFeishuMessage(params: {
         ThreadStarterBody: threadContext.threadStarterBody,
         ThreadHistoryBody: threadContext.threadHistoryBody,
         ThreadLabel: threadContext.threadLabel,
-        // Only use rootId (om_* message anchor) — threadId (omt_*) is a container
-        // ID and would produce invalid reply targets downstream.
-        MessageThreadId: ctx.rootId && isTopicSessionForThread ? ctx.rootId : undefined,
         Timestamp: messageCreateTimeMs,
         WasMentioned: wasMentioned,
         CommandAuthorized: commandAuthorized,

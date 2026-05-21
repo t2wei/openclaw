@@ -4,6 +4,8 @@ import { createChannelMessageReplyPipeline } from "openclaw/plugin-sdk/channel-m
 import {
   formatChannelProgressDraftLineForEntry,
   isChannelProgressDraftWorkToolName,
+  resolveChannelPreviewStreamMode,
+  resolveChannelStreamingBlockEnabled,
 } from "openclaw/plugin-sdk/channel-streaming";
 import {
   resolveSendableOutboundReplyParts,
@@ -128,6 +130,11 @@ type CreateFeishuReplyDispatcherParams = {
   /** Epoch ms when the inbound message was created. Used to suppress typing
    *  indicators on old/replayed messages after context compaction (#30418). */
   messageCreateTimeMs?: number;
+  /** True when invoked from an outbound (agent-initiated) flow — follow-up
+   *  runs, A2A callbacks, deliverAgentCommandResult. No user is waiting at the
+   *  keyboard, so the typing indicator (a reaction on the original message)
+   *  would be misleading. */
+  outbound?: boolean;
 };
 
 export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherParams) {
@@ -163,7 +170,16 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
     channel: "feishu",
     accountId,
     typing: {
+      // Feishu uses emoji reactions as typing indicators (no native typing API).
+      // Unlike Telegram/Discord, reactions are persistent and don't auto-expire,
+      // so keepalive re-sends are unnecessary and cause repeated notifications.
+      keepaliveIntervalMs: 0,
       start: async () => {
+        // Outbound (agent-initiated) flows have no human waiting at the keyboard;
+        // reacting to the original message would be misleading.
+        if (params.outbound === true) {
+          return;
+        }
         // Check if typing indicator is enabled (default: true)
         if (!(account.config.typingIndicator ?? true)) {
           return;
@@ -228,13 +244,25 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
   const chunkMode = core.channel.text.resolveChunkMode(cfg, "feishu");
   const tableMode = core.channel.text.resolveMarkdownTableMode({ cfg, channel: "feishu" });
   const renderMode = account.config?.renderMode ?? "auto";
-  const streamingEnabled = account.config?.streaming !== false && renderMode !== "raw";
-  const coreBlockStreamingEnabled = account.config?.blockStreaming === true;
+  // Streaming mode reads through the shared resolver so both the legacy flat
+  // shape (`streaming: bool`, `blockStreaming: bool`) and the new nested shape
+  // (`streaming: { mode, block, ... }`) work identically.
+  const streamMode = resolveChannelPreviewStreamMode(account.config, "partial");
+  const streamingEnabled = streamMode !== "off" && renderMode !== "raw";
+  const coreBlockStreamingEnabled = resolveChannelStreamingBlockEnabled(account.config) === true;
   const reasoningPreviewEnabled = streamingEnabled && params.allowReasoningPreview === true;
 
   let streaming: FeishuStreamingSession | null = null;
   let streamText = "";
   let lastPartial = "";
+  /** Accumulated history of intermediate steps for the collapsible panel.
+   *  Recorded via onToolStart (tool names) and onBlockNotify (narrations). */
+  const historyEntries: string[] = [];
+  /** True when the turn involved actual intermediate work (tool calls).
+   *  Used to decide whether to show the history panel — the panel is a
+   *  reliability fallback for Feishu topic rendering issues, so it should
+   *  only appear when there is meaningful multi-step content to back up. */
+  let hasToolActivity = false;
   let reasoningText = "";
   let statusLine = "";
   let snapshotBaseText = "";
@@ -299,6 +327,13 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
     }
     if (options?.dedupeWithLastPartial) {
       lastPartial = nextText;
+      // Partial replies are cumulative — each payload contains the full text so far.
+      // Directly replace streamText to avoid the merge fallback appending duplicates.
+      streamText = nextText;
+    } else {
+      const mode = options?.mode ?? "snapshot";
+      streamText =
+        mode === "delta" ? `${streamText}${nextText}` : mergeStreamingText(streamText, nextText);
     }
     const mode = options?.mode ?? "snapshot";
     if (mode === "delta") {
@@ -384,8 +419,24 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
       if (streaming?.isActive()) {
         statusLine = "";
         const text = buildCombinedStreamText(reasoningText, streamText);
+        // Show the history panel when the turn produced any intermediate
+        // record — either tool activity or accumulated history entries
+        // (block text / reasoning narration). Panel is a reliability
+        // fallback for Feishu topic rendering: it records the full process
+        // so users can review even if the streaming card renders
+        // incompletely. We accept either signal because upstream's item
+        // lifecycle pipeline (af81ee9fee) means tool-only events don't
+        // always reach our onToolStart hook depending on provider/model.
+        const shouldShowPanel = hasToolActivity || historyEntries.length > 0;
+        const historyText =
+          historyEntries.length > 0 ? historyEntries.join("\n\n---\n\n") : undefined;
         const finalNote = resolveCardNote(agentId, identity, prefixContext.prefixContext);
-        await streaming.close(text, { note: finalNote });
+        await streaming.close(text, {
+          note: finalNote,
+          addFullTextPanel: shouldShowPanel,
+          historyText,
+          panelStyle: account.config?.historyPanel ?? undefined,
+        });
         // Track the raw streamed text so the duplicate-final check in deliver()
         // can skip the redundant text delivery that arrives after onIdle closes
         // the streaming card.
@@ -582,15 +633,21 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
 
           if (streaming?.isActive()) {
             if (info?.kind === "block") {
+              // Track block text in history panel (fork: streaming card history feature).
+              historyEntries.push(text);
               // Some runtimes emit block payloads without onPartial/final callbacks.
               // Mirror block text into streamText so onIdle close still sends content.
               queueStreamingUpdate(text, { mode: "delta", dedupeWithLastPartial: true });
             }
             if (info?.kind === "final") {
+              // Replace card content with final text. Don't close here — there may be
+              // multiple final payloads (narration texts that weren't delivered as blocks
+              // due to disableBlockStreaming). Let onIdle close with the last one.
               streamText = text;
               snapshotBaseText = "";
               lastSnapshotTextLength = text.length;
               flushStreamingCardUpdate(buildCombinedStreamText(reasoningText, streamText));
+              deliveredFinalTexts.add(text);
             }
             // Send media even when streaming handled the text
             if (hasMedia) {
@@ -664,18 +721,53 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
         typingCallbacks?.onCleanup?.();
       },
     });
-
   return {
     dispatcher,
     replyOptions: {
       ...replyOptions,
       onModelSelected: prefixContext.onModelSelected,
-      disableBlockStreaming:
-        typeof account.config?.blockStreaming === "boolean" ? !account.config.blockStreaming : true,
+      disableBlockStreaming: !(resolveChannelStreamingBlockEnabled(account.config) ?? false),
+      onBlockNotify: (payload: { text?: string }) => {
+        if (payload.text) {
+          historyEntries.push(payload.text);
+        }
+      },
+      // Upstream af81ee9fee introduced a parallel "item" lifecycle stream
+      // alongside the legacy "tool" stream. Some providers/models route
+      // tool progress only through items, so subscribe here to keep tool
+      // labels in the history panel and mark hasToolActivity. Other
+      // upstream channels (Discord/Slack/Telegram/MS Teams) already
+      // consume onItemEvent — this is the symmetric Feishu wiring.
+      onItemEvent: (payload: {
+        kind?: string;
+        phase?: string;
+        title?: string;
+        name?: string;
+        meta?: string;
+      }) => {
+        if (payload.phase !== "start") {
+          return;
+        }
+        if (payload.kind !== "tool") {
+          return;
+        }
+        const name = payload.name?.trim();
+        if (!name) {
+          return;
+        }
+        hasToolActivity = true;
+        const detail = payload.meta?.trim() ?? "";
+        const label = detail ? `▶ ${name} ${detail}`.slice(0, 80) : `▶ ${name}`;
+        historyEntries.push(`\`${label}\``);
+      },
       onPartialReply: streamingEnabled
         ? (payload: ReplyPayload) => {
             if (!payload.text) {
               return;
+            }
+            // Lazy card creation on first partial text (renderMode "card").
+            if (renderMode === "card") {
+              startStreaming();
             }
             const cleaned = stripReasoningTagsFromText(payload.text, {
               mode: "strict",
@@ -706,7 +798,15 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
             phase?: string;
             args?: Record<string, unknown>;
             detailMode?: "explain" | "raw";
+            meta?: string;
           }) => {
+            if (payload.phase === "start" && payload.name) {
+              hasToolActivity = true;
+              const label = payload.meta
+                ? `▶ ${payload.name} ${payload.meta}`.slice(0, 80)
+                : `▶ ${payload.name}`;
+              historyEntries.push(`\`${label}\``);
+            }
             if (!isChannelProgressDraftWorkToolName(payload.name)) {
               return;
             }

@@ -901,6 +901,24 @@ describe("feishuOutbound.sendText replyToId forwarding", () => {
     expect(sendMessageCall()?.replyToMessageId).toBe("om_inline");
     expect(sendMessageCall()?.replyInThread).toBe(false);
   });
+
+  // OxSci patch: A2A callback path passes both topic root replyToId (om_*)
+  // and topic scope threadId (omt_*). reply_in_thread must stay true so the
+  // reply lands inside the topic instead of appearing as a new top-level
+  // message.
+  it("forces replyInThread=true when threadId is a topic scope (omt_*) even with replyToId set", async () => {
+    await sendText({
+      cfg: emptyConfig,
+      to: "chat_1",
+      text: "agent reply via A2A callback",
+      replyToId: "om_topic_root",
+      threadId: "omt_topic_scope",
+      accountId: "main",
+    });
+
+    expect(sendMessageCall()?.replyToMessageId).toBe("om_topic_root");
+    expect(sendMessageCall()?.replyInThread).toBe(true);
+  });
 });
 
 describe("feishuOutbound.sendMedia replyToId forwarding", () => {

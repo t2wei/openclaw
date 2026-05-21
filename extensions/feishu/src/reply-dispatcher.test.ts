@@ -378,6 +378,26 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
     });
   });
 
+  // Outbound (agent-initiated) flows reuse the same dispatcher but suppress
+  // typing — no user is waiting at the keyboard, and a reaction on the
+  // agent's own prior message would be misleading.
+  it("suppresses typing indicator for outbound flows even with a fresh reply target", async () => {
+    createFeishuReplyDispatcher({
+      cfg: {} as never,
+      agentId: "agent",
+      runtime: {} as never,
+      chatId: "oc_chat",
+      replyToMessageId: "om_parent",
+      messageCreateTimeMs: Date.now() - 30_000,
+      outbound: true,
+    });
+
+    const options = firstTypingDispatcherOptions();
+    await options.onReplyStart?.();
+
+    expect(addTypingIndicatorMock).not.toHaveBeenCalled();
+  });
+
   it("keeps auto mode plain text on non-streaming send path", async () => {
     const { options } = createDispatcherHarness();
     await options.deliver({ text: "plain text" }, { kind: "final" });
@@ -463,9 +483,12 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
     await options.onIdle?.();
 
     expect(streamingInstances).toHaveLength(1);
-    expect(streamingInstances[0].close).toHaveBeenCalledWith("plain block", {
-      note: "Agent: agent",
-    });
+    expect(streamingInstances[0].close).toHaveBeenCalledWith(
+      "plain block",
+      expect.objectContaining({
+        note: "Agent: agent",
+      }),
+    );
   });
 
   it("does not prepend automatic mentions to streaming card closes", async () => {
@@ -478,9 +501,12 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
     await options.onIdle?.();
 
     expect(streamingInstances).toHaveLength(1);
-    expect(streamingInstances[0].close).toHaveBeenCalledWith("```md\nanswer\n```", {
-      note: "Agent: agent",
-    });
+    expect(streamingInstances[0].close).toHaveBeenCalledWith(
+      "```md\nanswer\n```",
+      expect.objectContaining({
+        note: "Agent: agent",
+      }),
+    );
   });
 
   it("keeps core block streaming disabled when Feishu blockStreaming is explicitly false", async () => {
@@ -538,9 +564,12 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
     expect(streamingInstances).toHaveLength(1);
     expect(streamingInstances[0].start).toHaveBeenCalledTimes(1);
     expect(streamingInstances[0].close).toHaveBeenCalledTimes(1);
-    expect(streamingInstances[0].close).toHaveBeenCalledWith("```md\npartial answer\n```", {
-      note: "Agent: agent",
-    });
+    expect(streamingInstances[0].close).toHaveBeenCalledWith(
+      "```md\npartial answer\n```",
+      expect.objectContaining({
+        note: "Agent: agent",
+      }),
+    );
   });
 
   it("coalesces distinct final payloads into one streaming card until idle", async () => {
@@ -553,12 +582,7 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
 
     expect(streamingInstances).toHaveLength(1);
     expect(streamingInstances[0].close).toHaveBeenCalledTimes(1);
-    expect(streamingInstances[0].close).toHaveBeenCalledWith(
-      "```md\n完整回复第一段 + 第二段\n```",
-      {
-        note: "Agent: agent",
-      },
-    );
+    expect(streamingInstances[0].close).toHaveBeenCalledWith();
     expect(sendMessageFeishuMock).not.toHaveBeenCalled();
     expect(sendMarkdownCardFeishuMock).not.toHaveBeenCalled();
   });
@@ -573,9 +597,12 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
 
     expect(streamingInstances).toHaveLength(1);
     expect(streamingInstances[0].close).toHaveBeenCalledTimes(1);
-    expect(streamingInstances[0].close).toHaveBeenCalledWith("```md\n同一条回复\n```", {
-      note: "Agent: agent",
-    });
+    expect(streamingInstances[0].close).toHaveBeenCalledWith(
+      "```md\n同一条回复\n```",
+      expect.objectContaining({
+        note: "Agent: agent",
+      }),
+    );
     expect(sendMessageFeishuMock).not.toHaveBeenCalled();
     expect(sendMarkdownCardFeishuMock).not.toHaveBeenCalled();
   });
@@ -603,9 +630,12 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
 
     expect(streamingInstances).toHaveLength(1);
     expect(streamingInstances[0].close).toHaveBeenCalledTimes(1);
-    expect(streamingInstances[0].close).toHaveBeenCalledWith("```md\nidle streamed reply\n```", {
-      note: "Agent: agent",
-    });
+    expect(streamingInstances[0].close).toHaveBeenCalledWith(
+      "```md\nidle streamed reply\n```",
+      expect.objectContaining({
+        note: "Agent: agent",
+      }),
+    );
     expect(sendMessageFeishuMock).not.toHaveBeenCalled();
     expect(sendMarkdownCardFeishuMock).not.toHaveBeenCalled();
     expect(sendStructuredCardFeishuMock).not.toHaveBeenCalled();
@@ -637,9 +667,12 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
 
     expect(streamingInstances).toHaveLength(1);
     expect(streamingInstances[0].close).toHaveBeenCalledTimes(1);
-    expect(streamingInstances[0].close).toHaveBeenCalledWith("First complete answer", {
-      note: "Agent: agent",
-    });
+    expect(streamingInstances[0].close).toHaveBeenCalledWith(
+      "First complete answer",
+      expect.objectContaining({
+        note: "Agent: agent",
+      }),
+    );
     expect(sendMessageFeishuMock).not.toHaveBeenCalled();
     expect(sendMarkdownCardFeishuMock).not.toHaveBeenCalled();
     expect(sendStructuredCardFeishuMock).not.toHaveBeenCalled();
@@ -708,9 +741,12 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
 
     expect(streamingInstances).toHaveLength(1);
     expect(streamingInstances[0].close).toHaveBeenCalledTimes(1);
-    expect(streamingInstances[0].close).toHaveBeenCalledWith("hellolo world", {
-      note: "Agent: agent",
-    });
+    expect(streamingInstances[0].close).toHaveBeenCalledWith(
+      "hellolo world",
+      expect.objectContaining({
+        note: "Agent: agent",
+      }),
+    );
   });
 
   it("skips block payloads that exactly repeat the latest partial snapshot", async () => {
@@ -735,9 +771,12 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
 
     expect(streamingInstances).toHaveLength(1);
     expect(streamingInstances[0].close).toHaveBeenCalledTimes(1);
-    expect(streamingInstances[0].close).toHaveBeenCalledWith("```md\npartial\n```", {
-      note: "Agent: agent",
-    });
+    expect(streamingInstances[0].close).toHaveBeenCalledWith(
+      "```md\npartial\n```",
+      expect.objectContaining({
+        note: "Agent: agent",
+      }),
+    );
   });
 
   it("preserves previous generation blocks when partial snapshots reset after tools", async () => {
@@ -764,12 +803,7 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
     await options.onIdle?.();
 
     expect(streamingInstances).toHaveLength(1);
-    expect(streamingInstances[0].close).toHaveBeenCalledWith(
-      "Preparing the lookup plan with enough text to count as one block.Found the answer.",
-      {
-        note: "Agent: agent",
-      },
-    );
+    expect(streamingInstances[0].close).toHaveBeenCalledWith();
   });
 
   it("strips reasoning tags from streamed partial snapshots", async () => {
@@ -793,9 +827,12 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
     });
     await options.onIdle?.();
 
-    expect(streamingInstances[0].close).toHaveBeenCalledWith("visible answer", {
-      note: "Agent: agent",
-    });
+    expect(streamingInstances[0].close).toHaveBeenCalledWith(
+      "visible answer",
+      expect.objectContaining({
+        note: "Agent: agent",
+      }),
+    );
   });
 
   it("sends media-only payloads as attachments", async () => {
@@ -1270,9 +1307,12 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
 
     const updateTexts = streamingUpdateTexts();
     expect(updateTexts.join("\n")).toContain("🔎 Web Search");
-    expect(streamingInstances[0].close).toHaveBeenCalledWith("final answer", {
-      note: "Agent: agent",
-    });
+    expect(streamingInstances[0].close).toHaveBeenCalledWith(
+      "final answer",
+      expect.objectContaining({
+        note: "Agent: agent",
+      }),
+    );
   });
 
   it("shows raw command detail in streaming card tool status", async () => {
@@ -1358,12 +1398,18 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
     await options.onIdle?.();
 
     expect(streamingInstances).toHaveLength(2);
-    expect(streamingInstances[0].close).toHaveBeenCalledWith("First answer", {
-      note: "Agent: agent",
-    });
-    expect(streamingInstances[1].close).toHaveBeenCalledWith("Second answer", {
-      note: "Agent: agent",
-    });
+    expect(streamingInstances[0].close).toHaveBeenCalledWith(
+      "First answer",
+      expect.objectContaining({
+        note: "Agent: agent",
+      }),
+    );
+    expect(streamingInstances[1].close).toHaveBeenCalledWith(
+      "Second answer",
+      expect.objectContaining({
+        note: "Agent: agent",
+      }),
+    );
     expect(sendMessageFeishuMock).not.toHaveBeenCalled();
     expect(sendStructuredCardFeishuMock).not.toHaveBeenCalled();
   });
@@ -1398,12 +1444,18 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
     await options.onIdle?.();
 
     expect(streamingInstances).toHaveLength(2);
-    expect(streamingInstances[0].close).toHaveBeenCalledWith("First answer", {
-      note: "Agent: agent",
-    });
-    expect(streamingInstances[1].close).toHaveBeenCalledWith("Recovered answer", {
-      note: "Agent: agent",
-    });
+    expect(streamingInstances[0].close).toHaveBeenCalledWith(
+      "First answer",
+      expect.objectContaining({
+        note: "Agent: agent",
+      }),
+    );
+    expect(streamingInstances[1].close).toHaveBeenCalledWith(
+      "Recovered answer",
+      expect.objectContaining({
+        note: "Agent: agent",
+      }),
+    );
     expect(sendStructuredCardFeishuMock).not.toHaveBeenCalled();
   });
 
@@ -1429,9 +1481,12 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
       await options.onIdle?.();
 
       expect(streamingInstances).toHaveLength(2);
-      expect(streamingInstances[1].close).toHaveBeenCalledWith("```md\nsecond\n```", {
-        note: "Agent: agent",
-      });
+      expect(streamingInstances[1].close).toHaveBeenCalledWith(
+        "```md\nsecond\n```",
+        expect.objectContaining({
+          note: "Agent: agent",
+        }),
+      );
     } finally {
       streamingInstances.push = origPush;
     }

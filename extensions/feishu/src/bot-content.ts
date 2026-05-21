@@ -47,6 +47,7 @@ type ResolvedFeishuGroupSession = {
   groupSessionScope: GroupSessionScope;
   replyInThread: boolean;
   threadReply: boolean;
+  topicScope: string | null;
 };
 
 export function resolveFeishuGroupSession(params: {
@@ -127,6 +128,7 @@ export function resolveFeishuGroupSession(params: {
     groupSessionScope,
     replyInThread,
     threadReply,
+    topicScope,
   };
 }
 

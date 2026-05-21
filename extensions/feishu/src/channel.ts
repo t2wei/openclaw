@@ -30,7 +30,10 @@ import {
   renderMessagePresentationFallbackText,
 } from "openclaw/plugin-sdk/interactive-runtime";
 import { createLazyRuntimeNamedExport } from "openclaw/plugin-sdk/lazy-runtime";
-import { createRuntimeOutboundDelegates } from "openclaw/plugin-sdk/outbound-runtime";
+import {
+  createRuntimeOutboundDelegates,
+  resolveAgentOutboundIdentity,
+} from "openclaw/plugin-sdk/outbound-runtime";
 import { createComputedAccountStatusAdapter } from "openclaw/plugin-sdk/status-helpers";
 import { normalizeLowercaseStringOrEmpty } from "openclaw/plugin-sdk/string-coerce-runtime";
 import {
@@ -47,6 +50,7 @@ import type {
   ChannelMessageActionName,
   ChannelMeta,
   ChannelPlugin,
+  ChannelReplyDispatcherContext,
   ClawdbotConfig,
 } from "./channel-runtime-api.js";
 import {
@@ -70,6 +74,7 @@ import {
 import { listFeishuDirectoryGroups, listFeishuDirectoryPeers } from "./directory.static.js";
 import { messageActionTargetAliases } from "./message-action-contract.js";
 import { resolveFeishuGroupToolPolicy } from "./policy.js";
+import { createFeishuReplyDispatcher } from "./reply-dispatcher.js";
 import { collectRuntimeConfigAssignments, secretTargetRegistryEntries } from "./secret-contract.js";
 import { collectFeishuSecurityAuditFindings } from "./security-audit.js";
 import { createFeishuSendReceipt } from "./send-result.js";
@@ -78,6 +83,7 @@ import { resolveFeishuOutboundSessionRoute } from "./session-route.js";
 import { feishuSetupAdapter } from "./setup-core.js";
 import { feishuSetupWizard, runFeishuLogin } from "./setup-surface.js";
 import { looksLikeFeishuId, normalizeFeishuTarget } from "./targets.js";
+import { getTopicReplyTarget } from "./topic-reply-cache.js";
 import type { FeishuConfig, FeishuProbeResult, ResolvedFeishuAccount } from "./types.js";
 
 function readFeishuMediaParam(params: Record<string, unknown>): string | undefined {
@@ -260,7 +266,13 @@ function describeFeishuMessageTool({
   if (enabledAccounts.length === 0) {
     return {
       actions: [],
-      capabilities: enabled ? ["presentation"] : [],
+      // OXSCI PATCH: Do not expose card capability/schema to the message tool.
+      // Card rendering is an internal Feishu plugin concern — the outbound
+      // sendText handler auto-selects card mode based on content (markdown
+      // tables, code blocks). Exposing card JSON to the LLM causes 400 errors
+      // (Feishu ErrCode 200380) when the model generates invalid card JSON.
+      capabilities: [],
+      schema: null,
     };
   }
   const actions = new Set<ChannelMessageActionName>([
@@ -285,7 +297,8 @@ function describeFeishuMessageTool({
   }
   return {
     actions: Array.from(actions),
-    capabilities: enabled ? ["presentation"] : [],
+    capabilities: [],
+    schema: null,
   };
 }
 
@@ -377,8 +390,24 @@ function resolveFeishuTopicAutoThreadAnchor(ctx: FeishuSendActionContext): strin
   if (!isFeishuGroupTopicSessionKey(ctx.sessionKey)) {
     return undefined;
   }
+  // Prefer the inbound message id — the direct reply target inside the topic.
   const inbound = ctx.toolContext?.currentMessageId;
-  return typeof inbound === "string" && inbound.length > 0 ? inbound : undefined;
+  if (typeof inbound === "string" && inbound.length > 0) {
+    return inbound;
+  }
+  // A2A-triggered runs (and any send not anchored to a fresh inbound message)
+  // have no currentMessageId. Without a reply target the send falls back to
+  // im.message.create on the chat, which in a topic-enabled group spawns a NEW
+  // topic in the group root — the regression we are fixing. Fall back to the
+  // cached topic reply target (populated by bot.ts inbound via
+  // rememberTopicReplyTarget) so the message still replies into the topic.
+  // This mirrors the resolveReplyTransport hook used by the outbound adapter.
+  const parsed = parseFeishuConversationId({ conversationId: ctx.sessionKey ?? "" });
+  const topicId = parsed?.topicId;
+  if (typeof topicId === "string" && topicId.length > 0) {
+    return getTopicReplyTarget(topicId) ?? undefined;
+  }
+  return undefined;
 }
 
 function buildFeishuSendReplyAnchor(ctx: FeishuSendActionContext): FeishuActionReplyAnchor {
@@ -1419,5 +1448,69 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount, FeishuProbeResul
         sendText: { resolve: (runtime) => runtime.feishuOutbound.sendText },
         sendMedia: { resolve: (runtime) => runtime.feishuOutbound.sendMedia },
       }),
+    },
+    threading: {
+      resolveAutoThreadId: ({ toolContext, replyToId }) => {
+        if (!toolContext) return undefined;
+        const sessionThreadId = toolContext.messageThreadId ?? toolContext.currentThreadTs;
+        const sessionIsTopic =
+          typeof sessionThreadId === "string" && sessionThreadId.startsWith("omt_");
+        // Feishu topics (omt_*): always echo the topic threadId, even when the
+        // caller supplied an explicit replyToId. Without threadId the outbound
+        // resolver computes replyInThread=false and the reply lands in the
+        // group root instead of inside the topic.
+        if (sessionIsTopic) {
+          return sessionThreadId;
+        }
+        if (replyToId) return undefined;
+        return sessionThreadId ?? undefined;
+      },
+      resolveReplyTransport: ({ threadId, replyToId }) => {
+        // For Feishu topic scopes (omt_*), the topic id itself is NOT a valid
+        // replyToMessageId. Resolve to an om_* reply target so outbound replies
+        // land inside the topic instead of escaping to the group root.
+        //   - If the caller supplied an explicit om_* replyToId (e.g. agent
+        //     replying to a specific message inside the topic), honor it.
+        //   - Otherwise look up the cached topic root populated by bot.ts via
+        //     rememberTopicReplyTarget.
+        if (typeof threadId === "string" && threadId.startsWith("omt_")) {
+          const trimmedCallerReplyToId = replyToId?.trim() || undefined;
+          const resolvedReplyToId = trimmedCallerReplyToId ?? getTopicReplyTarget(threadId);
+          return { replyToId: resolvedReplyToId, threadId };
+        }
+        // Non-topic targets: pass through.
+        return { replyToId: replyToId ?? undefined, threadId };
+      },
+    },
+    replyDispatcher: {
+      // Outbound (agent-initiated) flows — follow-up runs, A2A callbacks —
+      // create the same ReplyDispatcher that inbound dispatch uses, so a
+      // single agent Round maps to one streaming card on Feishu.
+      // Typing indicators are suppressed because no user is waiting.
+      createReplyDispatcher: (ctx: ChannelReplyDispatcherContext) => {
+        const threadIdRaw =
+          ctx.threadId === null || ctx.threadId === undefined ? undefined : String(ctx.threadId);
+        const threadIsTopic = typeof threadIdRaw === "string" && threadIdRaw.startsWith("omt_");
+        const replyToFromTransport = threadIsTopic
+          ? (ctx.replyToMessageId ?? getTopicReplyTarget(threadIdRaw))
+          : ctx.replyToMessageId;
+        const identity = ctx.identity ?? resolveAgentOutboundIdentity(ctx.cfg, ctx.agentId);
+        return createFeishuReplyDispatcher({
+          cfg: ctx.cfg,
+          agentId: ctx.agentId,
+          runtime: ctx.runtime,
+          chatId: ctx.chatId,
+          allowReasoningPreview: ctx.allowReasoningPreview,
+          replyToMessageId: replyToFromTransport,
+          skipReplyToInMessages: ctx.skipReplyToInMessages,
+          replyInThread: ctx.replyInThread ?? threadIsTopic,
+          threadReply: ctx.threadReply ?? threadIsTopic,
+          rootId: ctx.rootId,
+          accountId: ctx.accountId,
+          identity,
+          messageCreateTimeMs: ctx.messageCreateTimeMs,
+          outbound: ctx.outbound !== false,
+        });
+      },
     },
   });
