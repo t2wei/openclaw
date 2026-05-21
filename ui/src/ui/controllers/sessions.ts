@@ -481,7 +481,9 @@ async function loadSessionsOnce(
     const activeMinutes = showArchived
       ? 0
       : (overrides?.activeMinutes ?? toNumber(state.sessionsFilterActive, 0));
-    const limit = overrides?.limit ?? toNumber(state.sessionsFilterLimit, 0);
+    const DEFAULT_SESSIONS_LIMIT = 100;
+    const limit =
+      overrides?.limit ?? (toNumber(state.sessionsFilterLimit, 0) || DEFAULT_SESSIONS_LIMIT);
     const configuredAgentsOnly = overrides?.configuredAgentsOnly ?? true;
     const params: Record<string, unknown> = {
       includeGlobal,

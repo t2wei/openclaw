@@ -471,6 +471,33 @@ export async function startGatewaySidecars(params: {
       })
     : pluginServicesPromise;
 
+  if (params.cfg.session?.redis?.url) {
+    try {
+      const { initRedisSessionBackend } = await import("../config/sessions/redis-backend.js");
+      const { resolveStorePath } = await import("../config/sessions/paths.js");
+      const { loadSessionStore } = await import("../config/sessions/store.js");
+      const storePath = resolveStorePath(params.cfg.session?.store);
+      await initRedisSessionBackend(
+        {
+          redisUrl: params.cfg.session.redis.url,
+          storePaths: [storePath],
+          keyPrefix: params.cfg.session.redis.keyPrefix,
+        },
+        (sp) => {
+          try {
+            const store = loadSessionStore(sp, { skipCache: true });
+            const serialized = JSON.stringify(store);
+            return { store, serialized };
+          } catch {
+            return undefined;
+          }
+        },
+      );
+    } catch (err) {
+      params.log.warn(`redis session backend init failed: ${String(err)}`);
+    }
+  }
+
   const skipChannels =
     isTruthyEnvValue(process.env.OPENCLAW_SKIP_CHANNELS) ||
     isTruthyEnvValue(process.env.OPENCLAW_SKIP_PROVIDERS);

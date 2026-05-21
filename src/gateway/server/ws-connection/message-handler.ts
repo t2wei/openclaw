@@ -1566,6 +1566,8 @@ export function attachGatewayWsMessageHandler(params: GatewayWsMessageHandlerPar
           presenceKey,
           clientIp: reportedClientIp,
           ...(isTrustedApprovalRuntime ? { internal: { approvalRuntime: true } } : {}),
+          authUser: authResult.user,
+          authClaims: authResult.claims,
           ...(Object.keys(pluginSurfaceUrls).length > 0 ? { pluginSurfaceUrls } : {}),
           ...(Object.keys(pluginNodeCapabilitySurfaces).length > 0
             ? { pluginNodeCapabilitySurfaces }
