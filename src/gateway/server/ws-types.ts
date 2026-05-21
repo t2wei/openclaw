@@ -23,4 +23,8 @@ export type GatewayWsClient = PluginNodeCapabilityClient & {
   canvasCapabilityExpiresAtMs?: number;
   invalidated?: boolean;
   invalidatedReason?: string;
+  /** Authenticated user identity (e.g. email from trusted-proxy). */
+  authUser?: string;
+  /** Decoded auth claims (e.g. JWT payload from trusted-proxy). */
+  authClaims?: Record<string, unknown>;
 };

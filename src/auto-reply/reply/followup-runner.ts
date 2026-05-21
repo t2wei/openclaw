@@ -515,12 +515,14 @@ export function createFollowupRunner(params: {
         const hasTranscriptOwner =
           payloadMetadata?.assistantMessageIndex !== undefined ||
           payloadMetadata?.assistantTranscriptOwned === true;
+        const dispatcherKind: "tool" | "final" | undefined =
+          options.kind === "tool" || options.kind === "final" ? options.kind : undefined;
         const result =
-          dispatcher && options.kind
+          dispatcher && dispatcherKind
             ? await deliverFollowupPayloadThroughDispatcher({
                 dispatcher,
                 payload,
-                kind: options.kind,
+                kind: dispatcherKind,
               })
             : await routeReply({
                 payload,

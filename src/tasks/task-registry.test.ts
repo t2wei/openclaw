@@ -2451,8 +2451,7 @@ describe("task-registry", () => {
   // reclaim them. Renamed: was "closes stale terminal persistent ACP sessions
   // only when no binding remains".
   it("keeps terminal persistent ACP sessions alive even when no binding remains", async () => {
-    await withTaskRegistryTempDir(async (root) => {
-      process.env.OPENCLAW_STATE_DIR = root;
+    await withTaskRegistryTempDir(async () => {
       resetTaskRegistryMemoryForTest();
       const now = Date.now();
       const parentSessionKey = "agent:main:telegram:direct:owner";
@@ -2616,8 +2615,7 @@ describe("task-registry", () => {
     // (ACP runtime idle TTL or /acp close) rather than thread-binding presence,
     // so that Feishu topic A2A flows (where threadAvailable=false) survive
     // between turns.
-    await withTaskRegistryTempDir(async (root) => {
-      process.env.OPENCLAW_STATE_DIR = root;
+    await withTaskRegistryTempDir(async () => {
       resetTaskRegistryMemoryForTest();
       const parentSessionKey = "agent:main:telegram:direct:owner";
       const childSessionKey = "agent:claude:acp:unbound-orphaned-persistent";
