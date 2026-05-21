@@ -83,6 +83,9 @@ export function createBlockReplyDeliveryHandler(params: {
   blockStreamingEnabled: boolean;
   blockReplyPipeline: BlockReplyPipeline | null;
   directlySentBlockKeys: Set<string>;
+  /** Notification-only callback invoked when block streaming is disabled.
+   * Does not affect didStream or final payload suppression. */
+  onBlockNotify?: (payload: ReplyPayload) => void;
 }): (payload: ReplyPayload) => Promise<void> {
   return async (payload) => {
     const { text, skip } = params.normalizeStreamingText(payload);
@@ -157,13 +160,18 @@ export function createBlockReplyDeliveryHandler(params: {
         trackingPayload: blockPayload,
         payload: blockPayload,
       });
-    } else if (blockHasNonTextContent) {
-      await sendDirectBlockReply({
-        onBlockReply: params.onBlockReply,
-        directlySentBlockKeys: params.directlySentBlockKeys,
-        trackingPayload: blockPayload,
-        payload: blockPayload,
-      });
+    } else {
+      if (params.onBlockNotify) {
+        params.onBlockNotify(blockPayload);
+      }
+      if (blockHasNonTextContent) {
+        await sendDirectBlockReply({
+          onBlockReply: params.onBlockReply,
+          directlySentBlockKeys: params.directlySentBlockKeys,
+          trackingPayload: blockPayload,
+          payload: blockPayload,
+        });
+      }
     }
     // When streaming is disabled entirely, text-only blocks are accumulated in final text.
   };

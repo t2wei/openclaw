@@ -1053,6 +1053,7 @@ export async function runEmbeddedAttempt(
             }),
             currentChannelId: params.currentChannelId,
             currentThreadTs: params.currentThreadTs,
+            replyTargetId: params.replyTargetId,
             currentMessageId: params.currentMessageId,
             includeCoreTools: toolConstructionPlan.includeCoreTools,
             includeToolSearchControls: toolSearchControlsEnabledForRun,

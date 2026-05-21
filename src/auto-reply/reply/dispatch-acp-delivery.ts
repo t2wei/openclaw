@@ -393,6 +393,8 @@ export function createAcpDispatchDeliveryCoordinator(params: {
         requesterSenderUsername: params.ctx.SenderUsername,
         requesterSenderE164: params.ctx.SenderE164,
         threadId: params.ctx.MessageThreadId,
+        replyTargetId:
+          params.ctx.ReplyTargetId != null ? String(params.ctx.ReplyTargetId) : undefined,
         cfg: params.cfg,
         mirror: false,
       });

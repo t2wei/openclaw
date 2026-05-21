@@ -88,6 +88,10 @@ export type GetReplyOptions = {
    * block boundaries without waiting for transport acks. */
   onBlockReplyQueued?: (payload: ReplyPayload, context?: BlockReplyContext) => Promise<void> | void;
   onBlockReply?: (payload: ReplyPayload, context?: BlockReplyContext) => Promise<void> | void;
+  /** Notification-only callback for block replies when block streaming is disabled.
+   * Unlike onBlockReply, this does NOT affect didStream or final payload suppression.
+   * Use this to observe intermediate narration steps without interfering with delivery. */
+  onBlockNotify?: (payload: ReplyPayload) => void;
   onToolResult?: (payload: ReplyPayload) => Promise<void> | void;
   /** Called when a tool phase starts/updates, before summary payloads are emitted. */
   onToolStart?: (payload: {
@@ -95,6 +99,7 @@ export type GetReplyOptions = {
     phase?: string;
     args?: Record<string, unknown>;
     detailMode?: "explain" | "raw";
+    meta?: string;
   }) => Promise<void> | void;
   /** Called when a concrete work item starts, updates, or completes. */
   onItemEvent?: (payload: {

@@ -414,7 +414,7 @@ export async function deliverAgentCommandResult(params: {
       accountId: resolvedAccountId,
       threadId: resolvedThreadId,
     }) ?? null;
-  const resolvedReplyToId = replyTransport?.replyToId ?? undefined;
+  const resolvedReplyToId = replyTransport?.replyToId ?? (opts.replyTargetId?.trim() || undefined);
   const resolvedThreadTarget =
     replyTransport && Object.hasOwn(replyTransport, "threadId")
       ? (replyTransport.threadId ?? null)

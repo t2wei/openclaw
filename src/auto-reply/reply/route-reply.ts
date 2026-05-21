@@ -63,6 +63,8 @@ export type RouteReplyParams = {
   requesterSenderE164?: string;
   /** Thread id for replies (Telegram topic id or Matrix thread event id). */
   threadId?: string | number;
+  /** Channel-specific reply target id (e.g. Feishu om_ message id for topic replies). */
+  replyTargetId?: string;
   /** Config for provider-specific settings. */
   cfg: OpenClawConfig;
   /** Optional abort signal for cooperative cancellation. */
@@ -206,7 +208,11 @@ export async function routeReply(params: RouteReplyParams): Promise<RouteReplyRe
       threadId,
       replyToId,
     }) ?? null;
-  const resolvedReplyToId = replyTransport?.replyToId ?? replyToId ?? undefined;
+  const resolvedReplyToId =
+    replyTransport?.replyToId ??
+    replyToId ??
+    // Channel-specific reply target (e.g. Feishu om_ message id for topic threads).
+    (params.replyTargetId?.trim() || undefined);
   const resolvedThreadId =
     replyTransport && Object.hasOwn(replyTransport, "threadId")
       ? (replyTransport.threadId ?? null)

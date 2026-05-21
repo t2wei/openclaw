@@ -978,6 +978,7 @@ export async function runPreparedReply(
     originatingTo: ctx.OriginatingTo,
     originatingAccountId: sessionCtx.AccountId,
     originatingThreadId: ctx.MessageThreadId,
+    originatingReplyTargetId: ctx.ReplyTargetId != null ? String(ctx.ReplyTargetId) : undefined,
     originatingChatType: ctx.ChatType,
     run: {
       agentId,

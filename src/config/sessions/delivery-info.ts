@@ -35,15 +35,17 @@ export function extractDeliveryInfo(
     | { channel?: string; to?: string; accountId?: string; threadId?: string | number }
     | undefined;
   threadId: string | undefined;
+  replyTargetId: string | undefined;
 } {
   const { baseSessionKey, threadId } = parseSessionThreadInfo(sessionKey);
   if (!sessionKey || !baseSessionKey) {
-    return { deliveryContext: undefined, threadId };
+    return { deliveryContext: undefined, threadId, replyTargetId: undefined };
   }
 
   let deliveryContext:
     | { channel?: string; to?: string; accountId?: string; threadId?: string | number }
     | undefined;
+  let replyTargetId: string | undefined;
   try {
     const cfg = options?.cfg ?? getRuntimeConfig();
     const lookup = loadDeliverySessionEntry({ cfg, sessionKey, baseSessionKey });
@@ -60,11 +62,15 @@ export function extractDeliveryInfo(
         accountId: storedDeliveryContext.accountId,
         threadId: storedDeliveryContext.threadId,
       };
+      replyTargetId =
+        typeof entry?.deliveryContext?.replyTargetId === "string"
+          ? entry.deliveryContext.replyTargetId.trim() || undefined
+          : undefined;
     }
   } catch {
     // ignore: best-effort
   }
-  return { deliveryContext, threadId };
+  return { deliveryContext, threadId, replyTargetId };
 }
 
 function resolveDeliveryStorePaths(cfg: OpenClawConfig, agentId: string): string[] {

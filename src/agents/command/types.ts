@@ -70,6 +70,8 @@ export type AgentCommandOpts = {
   replyAccountId?: string;
   /** Override delivery thread/topic id (separate from session routing). */
   threadId?: string | number;
+  /** Channel-specific reply target (e.g. Feishu om_ message ID for topic threading). */
+  replyTargetId?: string;
   /** Message channel context. */
   messageChannel?: string;
   /** Tool-policy/output surface context. Defaults to messageChannel. */

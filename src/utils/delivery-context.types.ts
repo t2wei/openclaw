@@ -14,6 +14,8 @@ export type DeliveryContext = Pick<
   to?: string;
   accountId?: string;
   threadId?: string | number;
+  /** Channel-specific reply target ID (e.g. Feishu om_ message_id for topic reply). */
+  replyTargetId?: string;
   deliveryIntent?: DeliveryIntentRef;
 };
 

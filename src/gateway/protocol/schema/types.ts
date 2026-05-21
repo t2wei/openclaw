@@ -72,6 +72,7 @@ export type SessionsPatchParams = SchemaType<"SessionsPatchParams">;
 export type SessionsPluginPatchParams = SchemaType<"SessionsPluginPatchParams">;
 export type SessionsPluginPatchResult = SchemaType<"SessionsPluginPatchResult">;
 export type SessionsResetParams = SchemaType<"SessionsResetParams">;
+export type SessionsCancelParams = SchemaType<"SessionsCancelParams">;
 export type SessionsDeleteParams = SchemaType<"SessionsDeleteParams">;
 export type SessionsCompactParams = SchemaType<"SessionsCompactParams">;
 export type SessionsUsageParams = SchemaType<"SessionsUsageParams">;

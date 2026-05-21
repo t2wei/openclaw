@@ -621,6 +621,7 @@ export async function dispatchReplyFromConfig(
       requesterSenderUsername: ctx.SenderUsername,
       requesterSenderE164: ctx.SenderE164,
       threadId: routeThreadId,
+      replyTargetId: ctx.ReplyTargetId != null ? String(ctx.ReplyTargetId) : undefined,
       cfg,
       abortSignal: options?.abortSignal,
       mirror: options?.mirror,

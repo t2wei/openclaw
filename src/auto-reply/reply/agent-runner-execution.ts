@@ -1417,6 +1417,7 @@ export async function runAgentTurnWithFallback(params: {
             blockStreamingEnabled: params.blockStreamingEnabled,
             blockReplyPipeline,
             directlySentBlockKeys,
+            onBlockNotify: params.opts?.onBlockNotify,
           })
         : undefined;
       const onToolResult = params.opts?.onToolResult;
@@ -1800,10 +1801,12 @@ export async function runAgentTurnWithFallback(params: {
                   if (evt.stream === "tool") {
                     const phase = readStringValue(evt.data.phase) ?? "";
                     const name = readStringValue(evt.data.name);
+                    const meta = readStringValue(evt.data.meta);
                     if (phase === "start" || phase === "update") {
                       const toolStartProgressPromise = params.opts?.onToolStart?.({
                         name,
                         phase,
+                        meta,
                         args:
                           evt.data.args && typeof evt.data.args === "object"
                             ? (evt.data.args as Record<string, unknown>)

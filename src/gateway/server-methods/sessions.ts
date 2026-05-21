@@ -59,6 +59,7 @@ import {
   ErrorCodes,
   errorShape,
   validateSessionsAbortParams,
+  validateSessionsCancelParams,
   validateSessionsCleanupParams,
   validateSessionsCompactParams,
   validateSessionsCompactionBranchParams,
@@ -107,6 +108,7 @@ import {
   type SessionsPreviewEntry,
   type SessionsPreviewResult,
 } from "../session-utils.js";
+import { evaluateSessionVisibility, filterSessionsByPeerIds } from "../session-visibility.js";
 import { applySessionsPatchToStore } from "../sessions-patch.js";
 import { resolveSessionKeyFromResolveParams } from "../sessions-resolve.js";
 import { setGatewayDedupeEntry } from "./agent-wait-dedupe.js";
@@ -795,12 +797,28 @@ async function handleSessionSend(params: {
   }
 }
 export const sessionsHandlers: GatewayRequestHandlers = {
-  "sessions.list": async ({ params, respond, context }) => {
+  "sessions.list": async ({ params, respond, context, client }) => {
     if (!assertValidParams(params, validateSessionsListParams, "sessions.list", respond)) {
       return;
     }
     const p = params;
     const cfg = context.getRuntimeConfig();
+
+    // Session visibility filtering (fork addition)
+    const visibilityConfig = cfg.gateway?.controlUi?.sessionVisibility;
+    const visibilityDecision = evaluateSessionVisibility(visibilityConfig, {
+      authUser: client?.authUser,
+      authClaims: client?.authClaims,
+    });
+    if (visibilityDecision && !visibilityDecision.allowed) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "access denied: organization not allowed"),
+      );
+      return;
+    }
+
     const configuredAgentsOnly = p.configuredAgentsOnly === true;
     const payload = await measureDiagnosticsTimelineSpan(
       "gateway.sessions.list",
@@ -868,9 +886,15 @@ export const sessionsHandlers: GatewayRequestHandlers = {
             },
           },
         );
+        // Apply peer-based filtering for session visibility (fork addition).
+        const filteredSessions =
+          visibilityDecision && !visibilityDecision.isAdmin
+            ? filterSessionsByPeerIds(sessions, visibilityDecision.peerIds)
+            : sessions;
         return {
           ...result,
-          sessions,
+          sessions: filteredSessions,
+          count: filteredSessions.length,
         };
       },
       {
@@ -1938,6 +1962,37 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       sessionKey: result.key,
       reason,
     });
+  },
+  "sessions.cancel": async ({ params, respond, context }) => {
+    if (!assertValidParams(params, validateSessionsCancelParams, "sessions.cancel", respond)) {
+      return;
+    }
+    const p = params;
+    const key = requireSessionKey(p.key, respond);
+    if (!key) {
+      return;
+    }
+
+    const { getAcpSessionManager } = await import("../../acp/control-plane/manager.js");
+    const acpManager = getAcpSessionManager();
+    const cfg = context.getRuntimeConfig();
+    try {
+      await acpManager.cancelSession({
+        cfg,
+        sessionKey: key,
+        reason: typeof p.reason === "string" ? p.reason : "sessions.cancel",
+      });
+      respond(true, { ok: true, key }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.UNAVAILABLE,
+          `cancel failed: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
+    }
   },
   "sessions.delete": async ({ params, respond, client, isWebchatConnect, context }) => {
     if (!assertValidParams(params, validateSessionsDeleteParams, "sessions.delete", respond)) {

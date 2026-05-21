@@ -45,7 +45,11 @@ export function kickFollowupDrainIfIdle(key: string): void {
 
 type OriginRoutingMetadata = Pick<
   FollowupRun,
-  "originatingChannel" | "originatingTo" | "originatingAccountId" | "originatingThreadId"
+  | "originatingChannel"
+  | "originatingTo"
+  | "originatingAccountId"
+  | "originatingThreadId"
+  | "originatingReplyTargetId"
 >;
 
 function resolveOriginRoutingMetadata(items: FollowupRun[]): OriginRoutingMetadata {
@@ -68,11 +72,16 @@ function resolveOriginRoutingMetadata(items: FollowupRun[]): OriginRoutingMetada
     ) {
       metadata.originatingThreadId = item.originatingThreadId;
     }
+    // Channel-specific reply target (e.g. Feishu om_ message ID for topic threading).
+    if (!metadata.originatingReplyTargetId && item.originatingReplyTargetId) {
+      metadata.originatingReplyTargetId = item.originatingReplyTargetId;
+    }
     if (
       metadata.originatingChannel &&
       metadata.originatingTo &&
       metadata.originatingAccountId &&
-      metadata.originatingThreadId != null
+      metadata.originatingThreadId != null &&
+      metadata.originatingReplyTargetId
     ) {
       break;
     }
@@ -171,6 +180,9 @@ export function scheduleFollowupDrain(
   key: string,
   runFollowup: (run: FollowupRun) => Promise<void>,
 ): void {
+  // Cache the callback eagerly so kickFollowupDrainIfIdle can restart a drain
+  // when a message is enqueued while a run is active.
+  FOLLOWUP_RUN_CALLBACKS.set(key, runFollowup);
   const queue = beginQueueDrain(FOLLOWUP_QUEUES, key);
   if (!queue) {
     return;

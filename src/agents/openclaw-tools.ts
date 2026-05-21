@@ -32,6 +32,7 @@ import type { SandboxFsBridge } from "./sandbox/fs-bridge.js";
 import type { SpawnedToolContext } from "./spawned-context.js";
 import type { ToolFsPolicy } from "./tool-fs-policy.js";
 import { resolveToolLoopDetectionConfig } from "./tool-loop-detection-config.js";
+import { createAcpSendTool } from "./tools/acp-send-tool.js";
 import { createAgentsListTool } from "./tools/agents-list-tool.js";
 import type { AnyAgentTool } from "./tools/common.js";
 import { createCronTool } from "./tools/cron-tool.js";
@@ -45,6 +46,7 @@ import { createMusicGenerateTool } from "./tools/music-generate-tool.js";
 import { createNodesTool } from "./tools/nodes-tool.js";
 import { createPdfTool } from "./tools/pdf-tool.js";
 import { createSessionStatusTool } from "./tools/session-status-tool.js";
+import { createSessionsCancelTool } from "./tools/sessions-cancel-tool.js";
 import { createSessionsHistoryTool } from "./tools/sessions-history-tool.js";
 import { createSessionsListTool } from "./tools/sessions-list-tool.js";
 import { createSessionsSendTool } from "./tools/sessions-send-tool.js";
@@ -98,6 +100,10 @@ export function createOpenClawTools(
     currentChannelId?: string;
     /** Current thread timestamp for auto-threading. */
     currentThreadTs?: string;
+    /** Raw session thread scope ID (may be platform-specific, e.g. Feishu omt_). */
+    messageThreadId?: string | number;
+    /** Channel-specific reply target (e.g. Feishu om_ message ID) for P7 threading. */
+    replyTargetId?: string;
     /** Current inbound message id for action fallbacks. */
     currentMessageId?: string | number;
     /** Reply-to mode for auto-threading. */
@@ -293,6 +299,9 @@ export function createOpenClawTools(
         currentChannelProvider: options?.agentChannel,
         currentThreadTs: options?.currentThreadTs,
         agentThreadId: options?.agentThreadId,
+        messageThreadId:
+          options?.messageThreadId != null ? String(options.messageThreadId) : undefined,
+        replyTargetId: options?.replyTargetId,
         currentMessageId: options?.currentMessageId,
         replyToMode: options?.replyToMode,
         hasRepliedRef: options?.hasRepliedRef,
@@ -406,6 +415,7 @@ export function createOpenClawTools(
             agentAccountId: options?.agentAccountId,
             agentTo: options?.agentTo,
             agentThreadId: options?.agentThreadId,
+            agentReplyTargetId: options?.replyTargetId,
             agentGroupId: options?.agentGroupId,
             agentGroupChannel: options?.agentGroupChannel,
             agentGroupSpace: options?.agentGroupSpace,
@@ -422,6 +432,12 @@ export function createOpenClawTools(
       sessionId: options?.sessionId,
       onYield: options?.onYield,
     }),
+    createAcpSendTool({
+      agentSessionKey: options?.agentSessionKey,
+      agentChannel: options?.agentChannel,
+      sandboxed: options?.sandboxed,
+    }),
+    createSessionsCancelTool(),
     createSubagentsTool({
       agentSessionKey: options?.agentSessionKey,
     }),

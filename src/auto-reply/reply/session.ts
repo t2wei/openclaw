@@ -604,6 +604,10 @@ export async function initSessionState(params: {
   const lastThreadIdRaw = isSystemEvent
     ? baseEntry?.lastThreadId
     : ctx.MessageThreadId || (isThread ? baseEntry?.lastThreadId : undefined);
+  const lastReplyTargetIdRaw = isSystemEvent
+    ? baseEntry?.deliveryContext?.replyTargetId
+    : (typeof ctx.ReplyTargetId === "string" ? ctx.ReplyTargetId.trim() : undefined) ||
+      baseEntry?.deliveryContext?.replyTargetId;
   const deliveryFields = isSystemEvent
     ? normalizeSessionDeliveryFields({
         channel: baseEntry?.channel,
@@ -622,6 +626,7 @@ export async function initSessionState(params: {
           to: lastToRaw,
           accountId: lastAccountIdRaw,
           threadId: lastThreadIdRaw,
+          replyTargetId: lastReplyTargetIdRaw,
         },
       });
   const lastChannel = deliveryFields.lastChannel ?? lastChannelRaw;

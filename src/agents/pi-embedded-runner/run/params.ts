@@ -70,6 +70,8 @@ export type RunEmbeddedPiAgentParams = {
   senderE164?: string | null;
   /** Whether the sender is an owner (required for owner-only tools). */
   senderIsOwner?: boolean;
+  /** Channel-specific reply target (e.g. Feishu om_ message ID) for P7 threading. */
+  replyTargetId?: string;
   /**
    * Additional owner-only tools authorized by a server-side runtime grant.
    * This must stay narrow; it does not make the sender an owner.

@@ -462,6 +462,10 @@ export type ChannelThreadingToolContext = {
   currentGraphChannelId?: string;
   currentChannelProvider?: ChannelId;
   currentThreadTs?: string;
+  /** Raw session MessageThreadId — may be a platform-specific scope ID (e.g. Feishu omt_). */
+  messageThreadId?: string;
+  /** Channel-specific reply target (e.g. Feishu om_ message ID) for outbound delivery. */
+  replyTargetId?: string;
   currentMessageId?: string | number;
   replyToMode?: "off" | "first" | "all" | "batched";
   hasRepliedRef?: { value: boolean };

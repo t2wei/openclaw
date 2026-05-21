@@ -34,6 +34,13 @@ export function normalizeDeliveryContext(context?: DeliveryContext): DeliveryCon
   if (threadId != null) {
     normalized.threadId = threadId;
   }
+  const replyTargetId =
+    typeof context.replyTargetId === "string"
+      ? context.replyTargetId.trim() || undefined
+      : undefined;
+  if (replyTargetId) {
+    normalized.replyTargetId = replyTargetId;
+  }
   return normalized;
 }
 
@@ -127,6 +134,9 @@ export function mergeDeliveryContext(
     threadId: channelsConflict
       ? normalizedPrimary?.threadId
       : (normalizedPrimary?.threadId ?? normalizedFallback?.threadId),
+    replyTargetId: channelsConflict
+      ? normalizedPrimary?.replyTargetId
+      : (normalizedPrimary?.replyTargetId ?? normalizedFallback?.replyTargetId),
   });
 }
 

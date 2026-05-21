@@ -207,6 +207,7 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "sessions.pluginPatch",
     "sessions.cleanup",
     "sessions.reset",
+    "sessions.cancel",
     "sessions.delete",
     "sessions.compact",
     "sessions.compaction.restore",

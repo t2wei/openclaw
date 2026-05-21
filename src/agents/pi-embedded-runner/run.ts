@@ -1274,6 +1274,7 @@ export async function runEmbeddedPiAgent(
             agentAccountId: params.agentAccountId,
             messageTo: params.messageTo,
             messageThreadId: params.messageThreadId,
+            replyTargetId: params.replyTargetId,
             groupId: params.groupId,
             groupChannel: params.groupChannel,
             groupSpace: params.groupSpace,
