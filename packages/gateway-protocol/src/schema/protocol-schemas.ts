@@ -253,6 +253,7 @@ import {
 } from "./secrets.js";
 import {
   SessionsAbortParamsSchema,
+  SessionsCancelParamsSchema,
   SessionsCompactParamsSchema,
   SessionsCompactionBranchParamsSchema,
   SessionsCompactionBranchResultSchema,
@@ -406,6 +407,7 @@ export const ProtocolSchemas = {
   SessionsPluginPatchParams: SessionsPluginPatchParamsSchema,
   SessionsPluginPatchResult: SessionsPluginPatchResultSchema,
   SessionsResetParams: SessionsResetParamsSchema,
+  SessionsCancelParams: SessionsCancelParamsSchema,
   SessionsDeleteParams: SessionsDeleteParamsSchema,
   SessionsCompactParams: SessionsCompactParamsSchema,
   SessionsUsageParams: SessionsUsageParamsSchema,

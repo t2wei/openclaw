@@ -1074,6 +1074,7 @@ export function createOpenClawCodingTools(options?: {
           onYield: options?.onYield,
           allowGatewaySubagentBinding: options?.allowGatewaySubagentBinding,
           recordToolPrepStage: options?.recordToolPrepStage,
+          messageThreadId: options?.messageThreadId,
         })
       : pluginToolsOnly),
     ...toolSearchTools,

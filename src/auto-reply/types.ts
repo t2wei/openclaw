@@ -5,6 +5,7 @@ export type {
   PartialReplyPayload,
   ReplyThreadingPolicy,
   TypingPolicy,
+  ModelSelectedContext,
 } from "./get-reply-options.types.js";
 export {
   copyReplyPayloadMetadata,
