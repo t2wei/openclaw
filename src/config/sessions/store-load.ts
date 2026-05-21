@@ -12,6 +12,7 @@ import {
 } from "../../utils/delivery-context.shared.js";
 import { getFileStatSnapshot } from "../cache-utils.js";
 import { hydrateSessionStoreSkillPromptRefs } from "./skill-prompt-blobs.js";
+import { getRedisSessionMirror, isRedisSessionBackendActive } from "./redis-backend.js";
 import {
   cloneSessionStoreRecord,
   cloneSessionStoreSnapshotEntry,
@@ -379,6 +380,14 @@ export function loadSessionStore(
 ): Record<string, SessionEntry> {
   const shouldHydrateSkillPromptRefs = opts.hydrateSkillPromptRefs !== false;
   const canWriteSessionStoreCache = shouldHydrateSkillPromptRefs;
+  // Redis in-memory mirror: zero disk I/O fast path (OXSCI fork addition).
+  if (!opts.skipCache && isRedisSessionBackendActive()) {
+    const redisMirror = getRedisSessionMirror(storePath);
+    if (redisMirror) {
+      return structuredClone(redisMirror);
+    }
+  }
+
   if (!opts.skipCache && isSessionStoreCacheEnabled()) {
     const currentFileStat = getFileStatSnapshot(storePath);
     const cached = readSessionStoreCache({

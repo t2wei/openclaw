@@ -20,6 +20,7 @@ import { formatSessionArchiveTimestamp } from "./artifacts.js";
 import { enforceSessionDiskBudget, type SessionDiskBudgetSweepResult } from "./disk-budget.js";
 import { deriveSessionMetaPatch } from "./metadata.js";
 import { resolveSessionFilePath, resolveStorePath } from "./paths.js";
+import { isRedisSessionBackendActive, updateRedisSessionMirror } from "./redis-backend.js";
 import {
   ensureSessionStorePromptBlobsForPersistence,
   isSessionSkillPromptBlobReadable,
@@ -285,6 +286,11 @@ function updateSessionStoreWriteCaches(params: {
     takeOwnership: params.takeOwnership,
   });
   dropSessionStoreSnapshotCache(params.storePath);
+
+  // Keep Redis mirror in sync after every write.
+  if (isRedisSessionBackendActive()) {
+    updateRedisSessionMirror(params.storePath, params.store, params.serialized);
+  }
 }
 
 function restoreUnchangedSessionStoreCache(
