@@ -18,6 +18,8 @@ import {
   buildAgentRuntimeDeliveryPlan,
   buildAgentRuntimeOutcomePlan,
 } from "../../agents/runtime-plan/build.js";
+import { getLoadedChannelPlugin, normalizeChannelId } from "../../channels/plugins/index.js";
+import type { ChannelReplyDispatcherResult } from "../../channels/plugins/types.adapters.js";
 import { updateSessionStore, type SessionEntry } from "../../config/sessions.js";
 import type { TypingMode } from "../../config/types.js";
 import { logVerbose } from "../../globals.js";
@@ -188,6 +190,86 @@ async function forwardFollowupProgressEvent(params: {
   }
 }
 
+/**
+ * Deliver a single follow-up payload through a ChannelReplyDispatcher.
+ *
+ * Returns a result shaped like `routeReply`'s — `ok: true` when the dispatcher
+ * accepted the payload (it may still error inside its delivery queue, in
+ * which case the dispatcher's own `onError` handles surface logging), `ok:
+ * false` only when the dispatcher refused (e.g. silent reply token filter).
+ */
+async function deliverFollowupPayloadThroughDispatcher(params: {
+  dispatcher: ChannelReplyDispatcherResult["dispatcher"];
+  payload: ReplyPayload;
+  kind: "tool" | "final";
+}): Promise<{ ok: boolean; error?: string }> {
+  const { dispatcher, payload, kind } = params;
+  const accepted =
+    kind === "tool" ? dispatcher.sendToolResult(payload) : dispatcher.sendFinalReply(payload);
+  return accepted ? { ok: true } : { ok: false, error: "dispatcher rejected payload" };
+}
+
+/**
+ * Try to create an outbound ReplyDispatcher for the originating channel of a
+ * follow-up turn. When the channel plugin implements `replyDispatcher`, the
+ * follow-up Round delivers through a single streaming card (with collapsible
+ * panel for tool activity) instead of one independent message per payload.
+ *
+ * Returns undefined when:
+ *   - originatingChannel is missing or non-routable (no channel to render to)
+ *   - the plugin is not loaded yet (e.g. early in startup)
+ *   - the plugin does not implement `replyDispatcher`
+ *   - the plugin opts out (returns undefined from `createReplyDispatcher`)
+ *
+ * Per design §2.3, when this returns undefined the follow-up falls back to the
+ * stateless routeReply path — payloads are sent as independent messages with
+ * no streaming card. That degraded mode is the intended behavior, not a bug
+ * to compensate for.
+ */
+function tryCreateOutboundReplyDispatcher(params: {
+  queued: FollowupRun;
+  runtimeConfig: FollowupRun["run"]["config"];
+}): ChannelReplyDispatcherResult | undefined {
+  const { queued } = params;
+  const originatingChannel = queued.originatingChannel;
+  if (!isRoutableChannel(originatingChannel) || !queued.originatingTo) {
+    return undefined;
+  }
+  const channelId = normalizeChannelId(originatingChannel);
+  if (!channelId) {
+    return undefined;
+  }
+  const plugin = getLoadedChannelPlugin(channelId);
+  const factory = plugin?.replyDispatcher?.createReplyDispatcher;
+  if (!factory) {
+    return undefined;
+  }
+  try {
+    const threadId =
+      queued.originatingThreadId === undefined ? undefined : queued.originatingThreadId;
+    const threadIdString = threadId === undefined ? undefined : String(threadId);
+    const replyInThread = typeof threadIdString === "string" && threadIdString.startsWith("omt_");
+    return factory({
+      cfg: params.runtimeConfig,
+      agentId: queued.run.agentId,
+      runtime: defaultRuntime,
+      chatId: queued.originatingTo,
+      threadId,
+      accountId: queued.originatingAccountId,
+      replyInThread,
+      threadReply: replyInThread,
+      outbound: true,
+      // For follow-ups, no `replyToMessageId` from the original inbound is
+      // available — the plugin resolves topic threading via its own cache.
+    });
+  } catch (err) {
+    logVerbose(
+      `followup queue: replyDispatcher.createReplyDispatcher failed: ${formatErrorMessage(err)}`,
+    );
+    return undefined;
+  }
+}
+
 export function createFollowupRunner(params: {
   opts?: GetReplyOptions;
   typing: TypingController;
@@ -230,7 +312,11 @@ export function createFollowupRunner(params: {
     payloads: ReplyPayload[],
     queued: FollowupRun,
     resolvedRun: { provider: string; modelId: string },
-    options: { mirror?: boolean } = {},
+    options: {
+      mirror?: boolean;
+      replyDispatcher?: ChannelReplyDispatcherResult;
+      kind?: "tool" | "final";
+    } = {},
   ) => {
     // Check if we should route to originating channel.
     const { originatingChannel, originatingTo } = queued;
@@ -290,20 +376,33 @@ export function createFollowupRunner(params: {
 
       // Route to originating channel if set, otherwise fall back to dispatcher.
       if (deliveryRoute === "origin" && isRoutableChannel(originatingChannel) && originatingTo) {
-        const result = await routeReply({
-          payload,
-          channel: originatingChannel,
-          to: originatingTo,
-          sessionKey: queued.run.sessionKey,
-          accountId: queued.originatingAccountId,
-          requesterSenderId: queued.run.senderId,
-          requesterSenderName: queued.run.senderName,
-          requesterSenderUsername: queued.run.senderUsername,
-          requesterSenderE164: queued.run.senderE164,
-          threadId: queued.originatingThreadId,
-          cfg: runtimeConfig,
-          mirror: options.mirror,
-        });
+        // When the channel plugin provides a ReplyDispatcher (e.g. Feishu's
+        // streaming card), deliver through it so the entire follow-up Round
+        // renders as one card with a collapsible history panel. Falls back to
+        // the stateless routeReply path when no dispatcher is available — by
+        // design that path produces no panel and no per-Round grouping.
+        const dispatcher = options.replyDispatcher?.dispatcher;
+        const result =
+          dispatcher && options.kind
+            ? await deliverFollowupPayloadThroughDispatcher({
+                dispatcher,
+                payload,
+                kind: options.kind,
+              })
+            : await routeReply({
+                payload,
+                channel: originatingChannel,
+                to: originatingTo,
+                sessionKey: queued.run.sessionKey,
+                accountId: queued.originatingAccountId,
+                requesterSenderId: queued.run.senderId,
+                requesterSenderName: queued.run.senderName,
+                requesterSenderUsername: queued.run.senderUsername,
+                requesterSenderE164: queued.run.senderE164,
+                threadId: queued.originatingThreadId,
+                cfg: runtimeConfig,
+                mirror: options.mirror,
+              });
         if (!result.ok) {
           const errorMsg = result.error ?? "unknown error";
           logVerbose(`followup queue: route-reply failed: ${errorMsg}`);
@@ -365,6 +464,7 @@ export function createFollowupRunner(params: {
     const queuedImages = queued.images ?? opts?.images;
     const queuedImageOrder = queued.imageOrder ?? opts?.imageOrder;
     let replyOperation: ReturnType<typeof createReplyOperation> | undefined;
+    let replyDispatcher: ChannelReplyDispatcherResult | undefined;
 
     try {
       queued.run.config = await resolveQueuedReplyExecutionConfig(queued.run.config, {
@@ -375,6 +475,11 @@ export function createFollowupRunner(params: {
       });
       const replySessionKey = queued.run.sessionKey ?? sessionKey;
       const runtimeConfig = resolveQueuedReplyRuntimeConfig(queued.run.config);
+      replyDispatcher = tryCreateOutboundReplyDispatcher({
+        queued,
+        runtimeConfig,
+      });
+      const replyDispatcherOptions = replyDispatcher?.replyOptions;
       let effectiveQueued =
         runtimeConfig === queued.run.config
           ? queued
@@ -769,14 +874,23 @@ export function createFollowupRunner(params: {
                         provider,
                         modelId: model,
                       },
-                      { mirror: false },
+                      { mirror: false, replyDispatcher, kind: "tool" },
                     );
                   }),
+                // Forward tool / item / block / partial events to the outbound
+                // dispatcher's reply options when available so that the streaming
+                // card accumulates intermediate-step history (panel) and live
+                // partial text during the agent run — same pattern inbound
+                // dispatch uses.
+                onPartialReply: replyDispatcherOptions?.onPartialReply,
+                onReasoningStream: replyDispatcherOptions?.onReasoningStream,
+                onReasoningEnd: replyDispatcherOptions?.onReasoningEnd,
+                onAssistantMessageStart: replyDispatcherOptions?.onAssistantMessageStart,
                 onAgentEvent: (evt) =>
                   enqueueProgressDelivery(async () => {
                     await forwardFollowupProgressEvent({
                       evt,
-                      opts,
+                      opts: replyDispatcherOptions ? { ...opts, ...replyDispatcherOptions } : opts,
                       detailMode: toolProgressDetail,
                       emitChannelProgress: shouldEmitToolResultProgress(),
                       onCompactionComplete: () => {
@@ -946,11 +1060,31 @@ export function createFollowupRunner(params: {
         return;
       }
 
-      await sendFollowupPayloads(deliveryPayloads, effectiveQueued, {
-        provider: providerUsed,
-        modelId: modelUsed,
-      });
+      await sendFollowupPayloads(
+        deliveryPayloads,
+        effectiveQueued,
+        {
+          provider: providerUsed,
+          modelId: modelUsed,
+        },
+        { replyDispatcher, kind: "final" },
+      );
     } finally {
+      // Close the outbound streaming card (if any). markComplete + waitForIdle
+      // drains the dispatcher's queue and triggers its `onIdle`, which closes
+      // the Feishu streaming card and attaches the collapsible history panel.
+      if (replyDispatcher) {
+        try {
+          replyDispatcher.dispatcher.markComplete();
+          await replyDispatcher.dispatcher.waitForIdle();
+        } catch (err) {
+          defaultRuntime.error?.(
+            `followup queue: reply dispatcher idle wait failed: ${formatErrorMessage(err)}`,
+          );
+        } finally {
+          replyDispatcher.markDispatchIdle();
+        }
+      }
       for (const end of endDeliveryCorrelations.toReversed()) {
         try {
           end();

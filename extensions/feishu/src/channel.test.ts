@@ -22,6 +22,7 @@ const getFeishuMemberInfoMock = vi.hoisted(() => vi.fn());
 const listFeishuDirectoryPeersLiveMock = vi.hoisted(() => vi.fn());
 const listFeishuDirectoryGroupsLiveMock = vi.hoisted(() => vi.fn());
 const feishuOutboundSendMediaMock = vi.hoisted(() => vi.fn());
+const createFeishuReplyDispatcherMock = vi.hoisted(() => vi.fn());
 
 vi.mock("./probe.js", () => ({
   probeFeishu: probeFeishuMock,
@@ -29,6 +30,10 @@ vi.mock("./probe.js", () => ({
 
 vi.mock("./client.js", () => ({
   createFeishuClient: createFeishuClientMock,
+}));
+
+vi.mock("./reply-dispatcher.js", () => ({
+  createFeishuReplyDispatcher: createFeishuReplyDispatcherMock,
 }));
 
 vi.mock("./channel.runtime.js", () => ({
@@ -171,6 +176,75 @@ describe("feishuPlugin.pairing.notifyApproval", () => {
     expect(sendArgs.cfg).toBe(cfg);
     expect(sendArgs.to).toBe("ou_user");
     expect(sendArgs.accountId).toBe("work");
+  });
+});
+
+describe("feishuPlugin.replyDispatcher", () => {
+  // The replyDispatcher adapter is the outbound (agent-initiated) entry point
+  // that lets follow-up runs / A2A callbacks reuse the same streaming card the
+  // inbound dispatcher produces. The factory must be wired and delegate to
+  // createFeishuReplyDispatcher with `outbound: true` and topic-aware
+  // threading derived from `omt_*` threadIds.
+  beforeEach(() => {
+    createFeishuReplyDispatcherMock.mockReset();
+    createFeishuReplyDispatcherMock.mockReturnValue({
+      dispatcher: {
+        sendToolResult: () => true,
+        sendBlockReply: () => true,
+        sendFinalReply: () => true,
+        waitForIdle: async () => {},
+        getQueuedCounts: () => ({ tool: 0, block: 0, final: 0 }),
+        getFailedCounts: () => ({ tool: 0, block: 0, final: 0 }),
+        markComplete: () => {},
+      },
+      replyOptions: {},
+      markDispatchIdle: () => {},
+    });
+  });
+
+  it("exposes the createReplyDispatcher factory", () => {
+    expect(feishuPlugin.replyDispatcher?.createReplyDispatcher).toBeTypeOf("function");
+  });
+
+  it("delegates to createFeishuReplyDispatcher with outbound=true and topic threading", () => {
+    const cfg = { channels: {} } as OpenClawConfig;
+    const result = feishuPlugin.replyDispatcher?.createReplyDispatcher({
+      cfg,
+      agentId: "main",
+      runtime: { log: () => {}, error: () => {} } as never,
+      chatId: "oc_chat_123",
+      threadId: "omt_topic_42",
+      accountId: "main",
+    });
+    expect(result).toBeDefined();
+    expect(createFeishuReplyDispatcherMock).toHaveBeenCalledTimes(1);
+    const args = requireRecord(
+      mockCallArg(createFeishuReplyDispatcherMock, 0, 0, "createFeishuReplyDispatcher"),
+      "create reply dispatcher args",
+    );
+    expect(args.outbound).toBe(true);
+    expect(args.chatId).toBe("oc_chat_123");
+    expect(args.accountId).toBe("main");
+    // omt_* threadIds must imply threadReply + replyInThread so the streaming
+    // card lands inside the topic rather than at the group root.
+    expect(args.threadReply).toBe(true);
+    expect(args.replyInThread).toBe(true);
+  });
+
+  it("does not set replyInThread for non-topic threadIds", () => {
+    feishuPlugin.replyDispatcher?.createReplyDispatcher({
+      cfg: { channels: {} } as OpenClawConfig,
+      agentId: "main",
+      runtime: { log: () => {}, error: () => {} } as never,
+      chatId: "oc_chat_123",
+      accountId: "main",
+    });
+    const args = requireRecord(
+      mockCallArg(createFeishuReplyDispatcherMock, 0, 0, "createFeishuReplyDispatcher"),
+      "create reply dispatcher args",
+    );
+    expect(args.threadReply).toBeFalsy();
+    expect(args.replyInThread).toBeFalsy();
   });
 });
 

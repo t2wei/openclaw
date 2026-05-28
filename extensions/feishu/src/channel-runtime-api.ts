@@ -2,6 +2,9 @@ export type {
   ChannelMessageActionName,
   ChannelMeta,
   ChannelPlugin,
+  ChannelReplyDispatcherAdapter,
+  ChannelReplyDispatcherContext,
+  ChannelReplyDispatcherResult,
   ClawdbotConfig,
 } from "../runtime-api.js";
 

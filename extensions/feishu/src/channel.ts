@@ -30,7 +30,10 @@ import {
   renderMessagePresentationFallbackText,
 } from "openclaw/plugin-sdk/interactive-runtime";
 import { createLazyRuntimeNamedExport } from "openclaw/plugin-sdk/lazy-runtime";
-import { createRuntimeOutboundDelegates } from "openclaw/plugin-sdk/outbound-runtime";
+import {
+  createRuntimeOutboundDelegates,
+  resolveAgentOutboundIdentity,
+} from "openclaw/plugin-sdk/outbound-runtime";
 import { createComputedAccountStatusAdapter } from "openclaw/plugin-sdk/status-helpers";
 import { normalizeLowercaseStringOrEmpty } from "openclaw/plugin-sdk/string-coerce-runtime";
 import {
@@ -47,6 +50,7 @@ import type {
   ChannelMessageActionName,
   ChannelMeta,
   ChannelPlugin,
+  ChannelReplyDispatcherContext,
   ClawdbotConfig,
 } from "./channel-runtime-api.js";
 import {
@@ -70,6 +74,7 @@ import {
 import { listFeishuDirectoryGroups, listFeishuDirectoryPeers } from "./directory.static.js";
 import { messageActionTargetAliases } from "./message-action-contract.js";
 import { resolveFeishuGroupToolPolicy } from "./policy.js";
+import { createFeishuReplyDispatcher } from "./reply-dispatcher.js";
 import { collectRuntimeConfigAssignments, secretTargetRegistryEntries } from "./secret-contract.js";
 import { collectFeishuSecurityAuditFindings } from "./security-audit.js";
 import { createFeishuSendReceipt } from "./send-result.js";
@@ -1475,6 +1480,37 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount, FeishuProbeResul
         }
         // Non-topic targets: pass through.
         return { replyToId: replyToId ?? undefined, threadId };
+      },
+    },
+    replyDispatcher: {
+      // Outbound (agent-initiated) flows — follow-up runs, A2A callbacks —
+      // create the same ReplyDispatcher that inbound dispatch uses, so a
+      // single agent Round maps to one streaming card on Feishu.
+      // Typing indicators are suppressed because no user is waiting.
+      createReplyDispatcher: (ctx: ChannelReplyDispatcherContext) => {
+        const threadIdRaw =
+          ctx.threadId === null || ctx.threadId === undefined ? undefined : String(ctx.threadId);
+        const threadIsTopic = typeof threadIdRaw === "string" && threadIdRaw.startsWith("omt_");
+        const replyToFromTransport = threadIsTopic
+          ? (ctx.replyToMessageId ?? getTopicReplyTarget(threadIdRaw))
+          : ctx.replyToMessageId;
+        const identity = ctx.identity ?? resolveAgentOutboundIdentity(ctx.cfg, ctx.agentId);
+        return createFeishuReplyDispatcher({
+          cfg: ctx.cfg,
+          agentId: ctx.agentId,
+          runtime: ctx.runtime,
+          chatId: ctx.chatId,
+          allowReasoningPreview: ctx.allowReasoningPreview,
+          replyToMessageId: replyToFromTransport,
+          skipReplyToInMessages: ctx.skipReplyToInMessages,
+          replyInThread: ctx.replyInThread ?? threadIsTopic,
+          threadReply: ctx.threadReply ?? threadIsTopic,
+          rootId: ctx.rootId,
+          accountId: ctx.accountId,
+          identity,
+          messageCreateTimeMs: ctx.messageCreateTimeMs,
+          outbound: ctx.outbound !== false,
+        });
       },
     },
   });

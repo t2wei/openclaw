@@ -130,6 +130,11 @@ type CreateFeishuReplyDispatcherParams = {
   /** Epoch ms when the inbound message was created. Used to suppress typing
    *  indicators on old/replayed messages after context compaction (#30418). */
   messageCreateTimeMs?: number;
+  /** True when invoked from an outbound (agent-initiated) flow — follow-up
+   *  runs, A2A callbacks, deliverAgentCommandResult. No user is waiting at the
+   *  keyboard, so the typing indicator (a reaction on the original message)
+   *  would be misleading. */
+  outbound?: boolean;
 };
 
 export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherParams) {
@@ -170,6 +175,11 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
       // so keepalive re-sends are unnecessary and cause repeated notifications.
       keepaliveIntervalMs: 0,
       start: async () => {
+        // Outbound (agent-initiated) flows have no human waiting at the keyboard;
+        // reacting to the original message would be misleading.
+        if (params.outbound === true) {
+          return;
+        }
         // Check if typing indicator is enabled (default: true)
         if (!(account.config.typingIndicator ?? true)) {
           return;
@@ -239,8 +249,7 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
   // (`streaming: { mode, block, ... }`) work identically.
   const streamMode = resolveChannelPreviewStreamMode(account.config, "partial");
   const streamingEnabled = streamMode !== "off" && renderMode !== "raw";
-  const coreBlockStreamingEnabled =
-    resolveChannelStreamingBlockEnabled(account.config) === true;
+  const coreBlockStreamingEnabled = resolveChannelStreamingBlockEnabled(account.config) === true;
   const reasoningPreviewEnabled = streamingEnabled && params.allowReasoningPreview === true;
 
   let streaming: FeishuStreamingSession | null = null;
