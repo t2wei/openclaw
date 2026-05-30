@@ -10,6 +10,7 @@ import {
 import type {
   ChannelOutboundAdapter,
   ChannelPairingAdapter,
+  ChannelReplyDispatcherAdapter,
   ChannelSecurityAdapter,
 } from "../channels/plugins/types.adapters.js";
 import type { ChannelConfigSchema } from "../channels/plugins/types.config.js";
@@ -165,7 +166,13 @@ export type {
 export type { ChatType } from "../channels/chat-type.js";
 export type { NormalizedLocation } from "../channels/location.js";
 export type { ChannelDirectoryEntry } from "../channels/plugins/types.core.js";
-export type { ChannelOutboundAdapter } from "../channels/plugins/types.adapters.js";
+export type {
+  ChannelOutboundAdapter,
+  ChannelReplyDispatcherAdapter,
+  ChannelReplyDispatcherContext,
+  ChannelReplyDispatcherReplyOptions,
+  ChannelReplyDispatcherResult,
+} from "../channels/plugins/types.adapters.js";
 export type { PollInput } from "../polls.js";
 export { isSecretRef } from "../config/types.secrets.js";
 export type { GatewayRequestHandlerOptions } from "../gateway/server-methods/types.js";
@@ -795,6 +802,7 @@ export function createChatChannelPlugin<
   pairing?: ChannelPairingAdapter | ChatChannelPairingOptions;
   threading?: ChannelThreadingAdapter | ChatChannelThreadingOptions<TResolvedAccount>;
   outbound?: ChannelOutboundAdapter | ChatChannelAttachedOutboundOptions;
+  replyDispatcher?: ChannelReplyDispatcherAdapter;
 }): ChannelPlugin<TResolvedAccount, Probe, Audit> {
   return {
     ...params.base,
@@ -806,6 +814,7 @@ export function createChatChannelPlugin<
     ...(params.pairing ? { pairing: resolveChatChannelPairing(params.pairing) } : {}),
     ...(params.threading ? { threading: resolveChatChannelThreading(params.threading) } : {}),
     ...(params.outbound ? { outbound: resolveChatChannelOutbound(params.outbound) } : {}),
+    ...(params.replyDispatcher ? { replyDispatcher: params.replyDispatcher } : {}),
   } as ChannelPlugin<TResolvedAccount, Probe, Audit>;
 }
 

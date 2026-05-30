@@ -8,6 +8,7 @@ import type { GroupToolPolicyConfig } from "../../config/types.tools.js";
 import type { ChannelApprovalNativeRuntimeAdapter } from "../../infra/approval-handler-runtime-types.js";
 import type { ChannelApprovalKind } from "../../infra/approval-types.js";
 import type { ExecApprovalRequest, ExecApprovalResolved } from "../../infra/exec-approvals.js";
+import type { OutboundIdentity } from "../../infra/outbound/identity-types.js";
 import type {
   PluginApprovalRequest,
   PluginApprovalResolved,
@@ -886,7 +887,12 @@ export type ChannelSecurityAdapter<ResolvedAccount = unknown> = {
 // this so framework code can create a dispatcher without channel-specific knowledge.
 // ---------------------------------------------------------------------------
 
-/** Context for creating a channel reply dispatcher (outbound agent-to-channel delivery). */
+/** Context for creating a channel reply dispatcher.
+ *
+ * Used by both inbound (user → agent → reply) and outbound (agent-initiated:
+ * follow-up runs, A2A callbacks) flows. The same dispatcher abstraction wraps
+ * both so a single agent Round maps to a single streaming card on the channel.
+ */
 export type ChannelReplyDispatcherContext = {
   cfg: OpenClawConfig;
   agentId: string;
@@ -894,21 +900,62 @@ export type ChannelReplyDispatcherContext = {
   chatId: string;
   threadId?: string | number | null;
   accountId?: string;
+  /** Provider message ID this turn should reply to (for threading on channels
+   *  with explicit reply targets, e.g. Feishu). */
+  replyToMessageId?: string;
+  /** Root message ID for thread context (Feishu topic root, etc.). */
+  rootId?: string;
+  /** True when the reply should be threaded under `replyToMessageId` / `rootId`. */
+  replyInThread?: boolean;
+  /** True when inbound originated inside a thread/topic (drives topic-aware
+   *  fallback inside the dispatcher). */
+  threadReply?: boolean;
+  /** When true, preserve a typing indicator on `replyToMessageId` but omit the
+   *  reply metadata on outgoing messages. */
+  skipReplyToInMessages?: boolean;
+  /** Agent identity (name, emoji, theme) used to brand streaming cards. */
+  identity?: OutboundIdentity;
+  /** When true, allow streaming the reasoning preview inline. */
+  allowReasoningPreview?: boolean;
+  /** Epoch ms when the inbound message was created. Used for typing-indicator
+   *  staleness checks; undefined skips that protection. */
+  messageCreateTimeMs?: number;
+  /** True when invoked from an outbound (agent-initiated) flow.
+   *  Outbound flows skip typing indicators because no user is waiting at the
+   *  keyboard. */
+  outbound?: boolean;
 };
+
+/** Reply options forwarded by a dispatcher.
+ *
+ * Plugins return the subset of GetReplyOptions they want the run to dispatch
+ * through. Outbound flows that operate without a typing controller should
+ * forward the agent-event hooks (onToolStart, onItemEvent, onBlockNotify,
+ * onPartialReply, onReasoningStream, etc.) so the dispatcher can accumulate
+ * history and stream the card during the agent run.
+ */
+export type ChannelReplyDispatcherReplyOptions = Pick<
+  GetReplyOptions,
+  | "onReplyStart"
+  | "onTypingController"
+  | "onTypingCleanup"
+  | "onPartialReply"
+  | "onReasoningStream"
+  | "onReasoningEnd"
+  | "onToolStart"
+  | "onItemEvent"
+  | "onBlockNotify"
+  | "onAssistantMessageStart"
+  | "onCompactionStart"
+  | "onCompactionEnd"
+  | "onModelSelected"
+  | "disableBlockStreaming"
+>;
 
 /** Result from creating a channel reply dispatcher. */
 export type ChannelReplyDispatcherResult = {
   dispatcher: ReplyDispatcher;
-  replyOptions: Pick<
-    GetReplyOptions,
-    | "onReplyStart"
-    | "onTypingController"
-    | "onTypingCleanup"
-    | "onPartialReply"
-    | "onToolStart"
-    | "onModelSelected"
-    | "disableBlockStreaming"
-  >;
+  replyOptions: ChannelReplyDispatcherReplyOptions;
   markDispatchIdle: () => void;
 };
 
