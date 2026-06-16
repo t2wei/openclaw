@@ -945,7 +945,6 @@ export type ChannelReplyDispatcherReplyOptions = Pick<
   | "onReasoningEnd"
   | "onToolStart"
   | "onItemEvent"
-  | "onBlockNotify"
   | "onAssistantMessageStart"
   | "onCompactionStart"
   | "onCompactionEnd"

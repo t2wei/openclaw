@@ -112,7 +112,6 @@ import { resolveFastModeState } from "./fast-mode.js";
 import { ensureSelectedAgentHarnessPlugin } from "./harness/runtime-plugin.js";
 import { resolveAvailableAgentHarnessPolicy } from "./harness/selection.js";
 import { prepareInternalSessionEffectsTranscript } from "./internal-session-effects.js";
-import { AGENT_LANE_SUBAGENT } from "./lanes.js";
 import { AGENT_LANE_NESTED, AGENT_LANE_SUBAGENT } from "./lanes.js";
 import { LiveSessionModelSwitchError } from "./live-model-switch.js";
 import { loadManifestModelCatalog } from "./model-catalog.js";
@@ -1180,10 +1179,8 @@ async function agentCommandInternal(
             : undefined;
         const parentKey = freshLastCaller ?? sessionEntry.spawnedBy;
         const acpAgent = resolveAgentIdFromSessionKey(sessionKey);
-        const {
-          deliveryContext: parentDelivery,
-          threadId: parentThreadId,
-        } = extractDeliveryInfo(parentKey);
+        const { deliveryContext: parentDelivery, threadId: parentThreadId } =
+          extractDeliveryInfo(parentKey);
         log.info?.(
           `[A2A callback] session=${sessionKey} → parent=${parentKey} agent=${acpAgent} textLen=${finalText.length} channel=${parentDelivery?.channel ?? "unknown"}`,
         );
