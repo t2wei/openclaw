@@ -329,7 +329,11 @@ export function createSessionsSpawnTool(
       const context =
         params.context === "fork" || params.context === "isolated" ? params.context : undefined;
       const streamTo = runtime === "acp" && params.streamTo === "parent" ? "parent" : undefined;
-      const lightContext = params.lightContext === true;
+      // OXSCI: silently drop lightContext for runtime="acp" — it's a
+      // subagent-only optimization, but LLMs sometimes pass it anyway. Failing
+      // the spawn here forces a wasted retry; ignoring is functionally
+      // equivalent for ACP. Schema description already states subagent-only.
+      const lightContext = params.lightContext === true && runtime !== "acp";
       const roleContext = requestedAgentId ? { role: requestedAgentId } : {};
       if (runtime === "acp" && !acpAvailable) {
         return jsonResult({
@@ -359,9 +363,6 @@ export function createSessionsSpawnTool(
           error: formatAcpInheritedToolAllowError(acpUnsupportedInheritedAllow),
           ...roleContext,
         });
-      }
-      if (runtime === "acp" && lightContext) {
-        throw new Error("lightContext is only supported for runtime='subagent'.");
       }
       if (runtime === "acp" && context === "fork") {
         throw new Error('context="fork" is only supported for runtime="subagent".');

@@ -538,22 +538,23 @@ describe("sessions_spawn tool", () => {
     expect(spawnArgs.lightContext).toBe(true);
   });
 
-  it('rejects lightContext when runtime is not "subagent"', async () => {
+  it('silently drops lightContext when runtime is not "subagent"', async () => {
+    // OXSCI: previously threw; now ignored to avoid wasted LLM retry. The
+    // subagent optimization is irrelevant for ACP, so the spawn continues
+    // without it.
     registerAcpBackendForTest();
     const tool = createSessionsSpawnTool({
       agentSessionKey: "agent:main:main",
     });
 
-    await expect(
-      tool.execute("call-light-acp", {
-        runtime: "acp",
-        task: "summarize this",
-        lightContext: true,
-      }),
-    ).rejects.toThrow("lightContext is only supported for runtime='subagent'.");
+    await tool.execute("call-light-acp", {
+      runtime: "acp",
+      task: "summarize this",
+      lightContext: true,
+    });
 
     expect(hoisted.spawnSubagentDirectMock).not.toHaveBeenCalled();
-    expect(hoisted.spawnAcpDirectMock).not.toHaveBeenCalled();
+    expect(hoisted.spawnAcpDirectMock).toHaveBeenCalled();
   });
 
   it("routes to ACP runtime when runtime=acp", async () => {
