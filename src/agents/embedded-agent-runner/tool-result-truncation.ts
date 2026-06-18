@@ -1069,6 +1069,11 @@ export async function truncateOversizedToolResultsInSession(params: {
     sessionLock = await acquireSessionWriteLock({
       sessionFile,
       ...resolveSessionWriteLockOptions(params.config),
+      // OXSCI: callers run inside the embedded agent attempt which already
+      // holds the outer session-write lock (non-reentrant by design). Without
+      // reentrant acquire here, same-pid lock contention deadlocks for 60s
+      // when a tool result overflow triggers truncation mid-attempt.
+      allowReentrant: true,
     });
     const state = await readTranscriptFileState(sessionFile);
     return await truncateOversizedToolResultsInTranscriptState({
