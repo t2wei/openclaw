@@ -1148,6 +1148,10 @@ async function compactEmbeddedAgentSessionDirectOnce(
           timeoutMs: compactionTimeoutMs,
         }),
       }),
+      // OXSCI: see allowReentrant note in tool-result-truncation.ts. Compaction
+      // can be triggered mid-attempt by context overflow precheck and must
+      // share the outer attempt lock.
+      allowReentrant: true,
     });
     try {
       await repairSessionFileIfNeeded({
