@@ -388,6 +388,9 @@ export async function rewriteTranscriptEntriesInSessionFile(params: {
     sessionLock = await acquireSessionWriteLock({
       sessionFile: params.sessionFile,
       ...resolveSessionWriteLockOptions(params.config),
+      // OXSCI: see allowReentrant note in tool-result-truncation.ts. Transcript
+      // rewrites can be invoked mid-attempt and must share the outer lock.
+      allowReentrant: true,
     });
     const state = await readTranscriptFileState(params.sessionFile);
     const result = rewriteTranscriptEntriesInState({
