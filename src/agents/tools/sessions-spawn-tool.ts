@@ -334,6 +334,10 @@ export function createSessionsSpawnTool(
       // the spawn here forces a wasted retry; ignoring is functionally
       // equivalent for ACP. Schema description already states subagent-only.
       const lightContext = params.lightContext === true && runtime !== "acp";
+      // OXSCI: same rationale for "thinking" — ACP backends reject it with
+      // ACP_BACKEND_UNSUPPORTED_CONTROL. Silently drop here for runtime="acp"
+      // to avoid a wasted spawn retry. Subagent runtime keeps the override.
+      const thinkingOverride = runtime === "acp" ? undefined : thinkingOverrideRaw;
       const roleContext = requestedAgentId ? { role: requestedAgentId } : {};
       if (runtime === "acp" && !acpAvailable) {
         return jsonResult({
@@ -397,7 +401,7 @@ export function createSessionsSpawnTool(
             agentId: requestedAgentId,
             resumeSessionId,
             model: modelOverride,
-            thinking: thinkingOverrideRaw,
+            thinking: thinkingOverride,
             cwd,
             mode: mode === "run" || mode === "session" ? mode : undefined,
             thread,
@@ -485,7 +489,7 @@ export function createSessionsSpawnTool(
           label: label || undefined,
           agentId: requestedAgentId,
           model: modelOverride,
-          thinking: thinkingOverrideRaw,
+          thinking: thinkingOverride,
           cwd,
           thread,
           mode,
