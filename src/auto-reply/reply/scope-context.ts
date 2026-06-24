@@ -24,7 +24,10 @@ const OPENID_INDEX_RELATIVE_PATH = "memory/people/_openid-index.json";
 export type ScopeContextScope = {
   /** Raw provider chat id (e.g. Lark `oc_…`); matches memory/groups/{chatId}/ dir name. */
   chatId?: string;
-  /** Fork topicScope (`ctx.MessageThreadId ?? RootMessageId`, e.g. Lark `omt_…`). */
+  /** Fork topicScope: session-key `:thread:` suffix (parseSessionThreadInfo) is the
+   * primary source; `ctx.MessageThreadId ?? RootMessageId` are only fallbacks (the
+   * official openclaw-lark plugin does NOT populate ctx.MessageThreadId — see design
+   * doc §4.1). e.g. Lark `omt_…`. */
   topicScope?: string;
   /** Sender open_id (`ou_…`); resolved to a user_id via the openid index. */
   senderId?: string;
