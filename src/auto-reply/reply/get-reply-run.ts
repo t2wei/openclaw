@@ -733,22 +733,30 @@ export async function runPreparedReply(
     ctx.RootMessageId ??
     sessionCtx.MessageThreadId ??
     sessionCtx.RootMessageId;
-  const scopeContextBlock =
-    workspaceDir && shouldApplyScopeContext({ cfg, isBareSessionReset })
-      ? await buildScopeContextBlock({
-          workspaceDir,
-          cfg,
-          scope: {
-            chatId: normalizeOptionalString(scopeGroupId),
-            topicScope:
-              scopeTopicRaw !== undefined && scopeTopicRaw !== null
-                ? normalizeOptionalString(String(scopeTopicRaw))
-                : undefined,
-            senderId:
-              normalizeOptionalString(sessionCtx.SenderId) ?? normalizeOptionalString(ctx.SenderId),
-          },
-        })
-      : null;
+  let scopeContextBlock: string | null = null;
+  if (workspaceDir && shouldApplyScopeContext({ cfg, isBareSessionReset })) {
+    try {
+      scopeContextBlock = await buildScopeContextBlock({
+        workspaceDir,
+        cfg,
+        scope: {
+          chatId: normalizeOptionalString(scopeGroupId),
+          topicScope:
+            scopeTopicRaw !== undefined && scopeTopicRaw !== null
+              ? normalizeOptionalString(String(scopeTopicRaw))
+              : undefined,
+          senderId:
+            normalizeOptionalString(sessionCtx.SenderId) ?? normalizeOptionalString(ctx.SenderId),
+        },
+      });
+    } catch (error) {
+      // Auxiliary best-effort context: a load failure (e.g. a post-open EFS I/O error)
+      // must never break the actual reply. Defined degradation (red-line #1) — skip the
+      // scope block and continue. logVerbose is throw-safe (wraps the logger in try/catch).
+      scopeContextBlock = null;
+      logVerbose(`scope-context: load failed, continuing without it (${String(error)})`);
+    }
+  }
   if (scopeContextBlock) {
     extraSystemPromptParts.push(scopeContextBlock);
     extraSystemPromptStaticParts.push(scopeContextBlock);
