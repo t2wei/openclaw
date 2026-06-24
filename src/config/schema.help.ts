@@ -1149,6 +1149,16 @@ export const FIELD_HELP: Record<string, string> = {
     "Maximum characters retained from each loaded daily memory file in the startup prelude (default: 1200).",
   "agents.defaults.startupContext.maxTotalChars":
     "Maximum total characters retained across all loaded daily memory files in the startup prelude (default: 2800). Additional files are truncated from the prelude once this cap is reached.",
+  "agents.defaults.scopeContext":
+    "Runtime-owned scope context injected into the system prompt: the group context, topic context, and sender relationship-memory files for the current conversation. Loaded miss-safe (missing files are skipped, never created) so the agent no longer needs prompt-driven reads.",
+  "agents.defaults.scopeContext.enabled":
+    "Enable runtime-loaded scope context (default: true). Disable to fall back to prompt-only behavior with no runtime-loaded group/topic/sender files.",
+  "agents.defaults.scopeContext.applyOn":
+    'When to inject scope context: "every" (every reply turn, recommended — reflects post-session writes) or "first" (only on bare "/new" and "/reset"). Default: ["every"].',
+  "agents.defaults.scopeContext.maxFileChars":
+    "Maximum characters retained from each scope file (group/topic/sender) in the injected block (default: 1200).",
+  "agents.defaults.scopeContext.maxTotalChars":
+    "Maximum total characters retained across the scope-context block (default: 2800). Additional files are truncated once this cap is reached.",
   "agents.defaults.repoRoot":
     "Optional repository root shown in the system prompt runtime line (overrides auto-detect).",
   "agents.defaults.promptOverlays":

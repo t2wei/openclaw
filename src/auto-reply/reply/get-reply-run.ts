@@ -26,6 +26,7 @@ import {
   resolveSessionFilePathOptions,
 } from "../../config/sessions/paths.js";
 import { resolveSessionStoreEntry } from "../../config/sessions/store.js";
+import { parseSessionThreadInfo } from "../../config/sessions/thread-info.js";
 import type { SessionEntry } from "../../config/sessions/types.js";
 import { resolveSilentReplySettings } from "../../config/silent-reply.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
@@ -100,6 +101,7 @@ import {
 import { resolveReplyToMode } from "./reply-threading.js";
 import { resolveRoutedDeliveryThreadId } from "./routed-delivery-thread.js";
 import { resolveRuntimePolicySessionKey } from "./runtime-policy-session-key.js";
+import { buildScopeContextBlock, shouldApplyScopeContext } from "./scope-context.js";
 import { resolveBareSessionResetPromptState } from "./session-reset-prompt.js";
 import { resolveBareResetBootstrapFileAccess } from "./session-reset-prompt.js";
 import { drainFormattedSystemEvents } from "./session-system-events.js";
@@ -714,6 +716,43 @@ export async function runPreparedReply(
           cfg,
         })
       : null;
+  // OXSCI: runtime-owned scope context (group/topic/sender memory files for this
+  // conversation), injected every turn via the existing extraSystemPrompt channel.
+  // Miss-safe — missing files are skipped, never created (replaces the prompt-driven
+  // MEMORY.md "Group & Topic Context" gate that caused ENOENT churn).
+  //
+  // Derive scope from the *resolved session identity*, not raw ctx fields: the
+  // official openclaw-lark plugin does not populate ctx.ChatId/MessageThreadId, it
+  // encodes them in ctx.From -> the session key. resolveGroupSessionKey(...).id gives
+  // the clean group id (matches memory/groups/{id}/ dir; same source as run.groupId),
+  // and the session key's :thread: suffix gives the topicScope (matches topics/{scope}.md).
+  const scopeGroupId = resolveGroupSessionKey(sessionCtx)?.id;
+  const scopeTopicRaw =
+    parseSessionThreadInfo(sessionKey).threadId ??
+    ctx.MessageThreadId ??
+    ctx.RootMessageId ??
+    sessionCtx.MessageThreadId ??
+    sessionCtx.RootMessageId;
+  const scopeContextBlock =
+    workspaceDir && shouldApplyScopeContext({ cfg, isBareSessionReset })
+      ? await buildScopeContextBlock({
+          workspaceDir,
+          cfg,
+          scope: {
+            chatId: normalizeOptionalString(scopeGroupId),
+            topicScope:
+              scopeTopicRaw !== undefined && scopeTopicRaw !== null
+                ? normalizeOptionalString(String(scopeTopicRaw))
+                : undefined,
+            senderId:
+              normalizeOptionalString(sessionCtx.SenderId) ?? normalizeOptionalString(ctx.SenderId),
+          },
+        })
+      : null;
+  if (scopeContextBlock) {
+    extraSystemPromptParts.push(scopeContextBlock);
+    extraSystemPromptStaticParts.push(scopeContextBlock);
+  }
   const baseBodyFinal = isBareSessionReset
     ? (bareResetPromptState?.prompt ?? "")
     : stripPromptThinkingDirectives(baseBody);

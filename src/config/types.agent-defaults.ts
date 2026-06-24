@@ -103,6 +103,21 @@ export type AgentStartupContextConfig = {
   maxTotalChars?: number;
 };
 
+export type AgentScopeContextConfig = {
+  /** Enable runtime-owned scope-context injection (group/topic/sender) into the system prompt (default: true). */
+  enabled?: boolean;
+  /**
+   * When to inject scope context (default: ["every"]).
+   * - "every": render on every reply turn (recommended; reflects post-session writes).
+   * - "first": render only on bare /new and /reset.
+   */
+  applyOn?: Array<"every" | "first">;
+  /** Max characters retained from each scope file (default: 1200). */
+  maxFileChars?: number;
+  /** Max total characters retained across the scope-context block (default: 2800). */
+  maxTotalChars?: number;
+};
+
 export type AgentContextLimitsConfig = {
   /** Default max chars returned by memory_get before truncation metadata/notice (default: 12000). */
   memoryGetMaxChars?: number;
@@ -304,6 +319,8 @@ export type AgentDefaultsConfig = {
   userTimezone?: string;
   /** Runtime-owned first-turn startup context for bare /new and /reset. */
   startupContext?: AgentStartupContextConfig;
+  /** Runtime-owned scope context (group/topic/sender) injected into the system prompt. */
+  scopeContext?: AgentScopeContextConfig;
   /** Focused context-budget overrides for high-volume injected/read surfaces. */
   contextLimits?: AgentContextLimitsConfig;
   /** Time format in system prompt: auto (OS preference), 12-hour, or 24-hour. */
