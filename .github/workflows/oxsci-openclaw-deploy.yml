@@ -124,6 +124,12 @@ jobs:
           env_map.setdefault('CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC', {
               'name': 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC', 'value': '1'
           })
+          # Poll-based fs watching so the gateway picks up EFS skill changes made
+          # from another host (EC2 install) without an ECS restart — native inotify
+          # does not propagate across EFS/NFS clients. See iteration/ employee-lifecycle.
+          env_map.setdefault('CHOKIDAR_USEPOLLING', {
+              'name': 'CHOKIDAR_USEPOLLING', 'value': 'true'
+          })
           container['environment'] = list(env_map.values())
 
           # Remove fields not accepted by register-task-definition
