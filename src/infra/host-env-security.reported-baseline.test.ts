@@ -22,6 +22,10 @@ type HostEnvReportedBaseline = {
 const INHERITED_ALLOWLIST_RATIONALE: Record<string, string> = {
   ALL_PROXY: "Trusted inherited global proxy route from operator runtime.",
   AWS_CONFIG_FILE: "Trusted inherited AWS CLI/SDK config path selected by operator.",
+  AWS_CONTAINER_CREDENTIALS_FULL_URI:
+    "Trusted inherited ECS/Fargate task-role credential endpoint injected by the container runtime (inherit only; still blocked as an agent-supplied override to prevent credential-endpoint spoofing).",
+  AWS_CONTAINER_CREDENTIALS_RELATIVE_URI:
+    "Trusted inherited ECS/Fargate task-role credential endpoint injected by the container runtime (inherit only; still blocked as an agent-supplied override to prevent credential-endpoint spoofing).",
   AWS_SHARED_CREDENTIALS_FILE:
     "Trusted inherited AWS shared credentials path selected by operator.",
   AWS_WEB_IDENTITY_TOKEN_FILE: "Trusted inherited AWS web identity token path.",

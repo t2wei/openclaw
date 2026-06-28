@@ -327,8 +327,10 @@ describe("isDangerousHostInheritedEnvVarName", () => {
     expect(isDangerousHostInheritedEnvVarName("ansible_library")).toBe(true);
     expect(isDangerousHostInheritedEnvVarName("TF_CLI_CONFIG_FILE")).toBe(true);
     expect(isDangerousHostInheritedEnvVarName("TF_VAR_admin_cidr")).toBe(false);
-    expect(isDangerousHostInheritedEnvVarName("AWS_CONTAINER_CREDENTIALS_FULL_URI")).toBe(true);
-    expect(isDangerousHostInheritedEnvVarName("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI")).toBe(true);
+    expect(isDangerousHostInheritedEnvVarName("AWS_CONTAINER_CREDENTIALS_FULL_URI")).toBe(false);
+    expect(isDangerousHostInheritedEnvVarName("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI")).toBe(
+      false,
+    );
     expect(isDangerousHostInheritedEnvVarName("KUBECONFIG")).toBe(false);
     expect(isDangerousHostInheritedEnvVarName("GOOGLE_APPLICATION_CREDENTIALS")).toBe(false);
     expect(isDangerousHostInheritedEnvVarName("AWS_SHARED_CREDENTIALS_FILE")).toBe(false);
@@ -774,8 +776,8 @@ describe("sanitizeHostExecEnv", () => {
     expect(env.XDG_DATA_HOME).toBe("/tmp/trusted-xdg-data");
     expect(env.XDG_RUNTIME_DIR).toBe("/tmp/trusted-xdg-runtime");
     expect(env.XDG_STATE_HOME).toBe("/tmp/trusted-xdg-state");
-    expect(env.AWS_CONTAINER_CREDENTIALS_FULL_URI).toBeUndefined();
-    expect(env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI).toBeUndefined();
+    expect(env.AWS_CONTAINER_CREDENTIALS_FULL_URI).toBe("http://169.254.170.2/credentials");
+    expect(env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI).toBe("/v2/credentials/abcd");
     expect(env.CONFIG_SITE).toBeUndefined();
     expect(env.ANSIBLE_CONFIG).toBeUndefined();
     expect(env.R_PROFILE_USER).toBeUndefined();
