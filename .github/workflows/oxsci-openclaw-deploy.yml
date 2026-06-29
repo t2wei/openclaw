@@ -64,6 +64,7 @@ jobs:
           docker system prune -af || true
 
       - name: Build and push Docker image
+        timeout-minutes: 30
         uses: docker/build-push-action@v6
         with:
           context: .
