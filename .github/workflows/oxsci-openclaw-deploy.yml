@@ -156,12 +156,28 @@ jobs:
             --task-definition ${{ steps.task-def.outputs.arn }} \
             --force-new-deployment
 
-          echo "Waiting for service to stabilize..."
-          aws ecs wait services-stable \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --services ${{ env.ECS_SERVICE }}
-
-          echo "Deploy complete: ${{ steps.version.outputs.tag }}"
+          # `aws ecs wait services-stable` has a hardcoded ~10min budget (40x15s,
+          # no CLI flag to extend). openclaw boots in 3-4min and the rolling drain
+          # pushes total stabilize past it, so the waiter false-failed (red run +
+          # skipped git tag) while ECS completed the rollout ~1min later. Poll the
+          # PRIMARY deployment's rolloutState up to ~24min; fail fast on a real
+          # circuit-breaker rollback (FAILED).
+          echo "Waiting for PRIMARY deployment rolloutState=COMPLETED..."
+          for i in $(seq 1 96); do
+            STATE=$(aws ecs describe-services \
+              --cluster ${{ env.ECS_CLUSTER }} \
+              --services ${{ env.ECS_SERVICE }} \
+              --query 'services[0].deployments[?status==`PRIMARY`].rolloutState | [0]' \
+              --output text)
+            echo "  [$i/96] rolloutState=$STATE"
+            case "$STATE" in
+              COMPLETED) echo "Deploy complete: ${{ steps.version.outputs.tag }}"; exit 0 ;;
+              FAILED)    echo "::error::ECS deployment rollout FAILED (circuit breaker rolled back)"; exit 1 ;;
+            esac
+            sleep 15
+          done
+          echo "::error::deployment did not reach COMPLETED within ~24min"
+          exit 1
 
       - name: Tag git commit
         run: |
